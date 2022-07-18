@@ -1,3 +1,7 @@
+[build-system]
+requires = ["poetry-core>=1.1.0a6"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.poetry]
 name = "volttron-lib-bacnet-driver"
 version = "0.1.0"
@@ -22,7 +26,7 @@ classifiers = [
 python = ">=3.8,<4.0"
 volttron-lib-base-driver = {git = "https://github.com/VOLTTRON/volttron-lib-base-driver.git", branch = "develop"}
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 volttron-testing = "^0.3.1a3"
 pytest = "^6.2.5"
 mock = "^4.0.3"
@@ -34,6 +38,12 @@ coverage = "^6.3.2"
 Sphinx = "^4.5.0"
 sphinx-rtd-theme = "^1.0.0"
 
+[tool.yapf]
+based_on_style = "pep8"
+spaces_before_comment = 4
+column_limit = 99
+split_before_logical_operator = true
+
 [tool.yapfignore]
 ignore_patterns = [
     ".venv/**",
@@ -41,20 +51,3 @@ ignore_patterns = [
     "dist/**",
     "docs/**"
 ]
-
-[tool.yapf]
-based_on_style = "pep8"
-spaces_before_comment = 4
-column_limit = 99
-split_before_logical_operator = true
-
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
-
-# tasks
-git-changelog = ">=0.5.0"
-httpx = ">=0.16.1"
-jinja2-cli = ">=0.7.0"
-toml = ">=0.10.2"

@@ -87,10 +87,10 @@ class Register(BaseRegister):
         self.python_type = BACNET_TYPE_MAPPING[object_type]
 
 
-class Interface(BaseInterface):
+class BACnet(BaseInterface):
 
     def __init__(self, **kwargs):
-        super(Interface, self).__init__(**kwargs)
+        super(BACnet, self).__init__(**kwargs)
         self.register_count = 10000
         self.register_count_divisor = 1
         self.cov_points = []

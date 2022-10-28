@@ -1,12 +1,17 @@
 name: Run tests
 
+
 on:
   push:
-    branches: [main, develop, releases]
     paths: ['**.py', '**.yml']
   pull_request:
     types: [opened, synchronize, reopened]
     paths: ['**.py']
+  workflow_dispatch:
+    inputs:
+      triggeredBy:
+        description: Name of team member who is manually triggering this workflow
+        required: true
 
 defaults:
   run:
@@ -15,6 +20,7 @@ defaults:
 env:
   LANG: en_US.utf-8
   LC_ALL: en_US.utf-8
+  POETRY_VERSION: 1.2.2
 
 jobs:
 
@@ -35,10 +41,10 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v3
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+    - name: Set up Python ${{ matrix.python }}
+      uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: ${{ matrix.python }}
 
     #----------------------------------------------
     #  -----  install & configure poetry  -----
@@ -46,18 +52,10 @@ jobs:
     - name: Install Poetry
       uses: snok/install-poetry@v1
       with:
-        version: 1.2.0b2
+        version: ${{ env.POETRY_VERSION }}
         virtualenvs-create: true
         virtualenvs-in-project: true
         installer-parallel: true
-
-    #----------------------------------------------
-    # Setup SSH agent so that we can access Volttron dependencies that are in private repos.
-    #----------------------------------------------
-    - name: Setup SSH agent
-      uses: webfactory/ssh-agent@v0.5.4
-      with:
-        ssh-private-key: ${{ secrets.PRIVATE_SSH_KEY }}
 
     #----------------------------------------------
     # install your root project, and run tests.
@@ -66,4 +64,4 @@ jobs:
       run: |
         poetry install --no-interaction
         poetry add --group dev pytest-github-actions-annotate-failures
-        poetry run pytest --exitfirst --verbose --failed-first --cov=src tests/
+        poetry run pytest --cov=src tests/

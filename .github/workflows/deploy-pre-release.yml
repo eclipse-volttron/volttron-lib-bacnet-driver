@@ -15,12 +15,11 @@ env:
   PYTHON_VERSION: '3.8'
   OWNER: eclipse-volttron
   POETRY_VERSION: 1.2.2
-  RUNS_ON: ubuntu-22.04
 
 jobs:
 
   bump_version:
-    runs-on: ${{env.RUNS_ON}}
+    runs-on: ubuntu-22.04
     steps:
     - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
     - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"

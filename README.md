@@ -1,17 +1,11 @@
 # volttron-lib-bacnet-driver
 
 ![Passing?](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run_tests.yml/badge.svg)
-[![documentation](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?style=flat)](https://VOLTTRON.github.io/volttron-lib-bacnet-driver/)
 [![pypi version](https://img.shields.io/pypi/v/volttron-lib-bacnet-driver.svg)](https://pypi.org/project/volttron-lib-bacnet-driver/)
-[![gitter](https://badges.gitter.im/join%20chat.svg)](https://gitter.im/volttron-lib-bacnet-driver/community)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-
-
 
 # Prerequisites
 
 * Python 3.8
-* Poetry 1.2
 
 ## Python
 
@@ -43,103 +37,112 @@ follow these [instructions](https://python-poetry.org/docs/master/#installation)
 
 # Installation
 
-With `pip`:
+1. Create and activate a virtual environment.
 
 ```shell
-python3.8 -m pip install volttron-lib-bacnet-driver
+python -m venv env
+source env/bin/activate
+```
 
-# Develop mode
-python3.8 -m pip install --editable volttron-lib-bacnet-driver
+2. Install volttron and start the platform.
+
+```shell
+pip install volttron
+
+# Start platform with output going to volttron.log
+volttron -vv -l volttron.log &
+```
+
+3. Install the volttron platform driver:
+
+```shell
+vctl install volttron-platform-driver --vip-identity platform.driver --start
+```
+
+4. Install the BACnetProxy agent:
+
+```shell
+vctl install volttron-bacnet-proxy --agent-config <path to bacnet proxy agent configuration file>
+```
+
+5.  Install the volttron bacnet driver library:
+
+```shell
+pip install volttron-lib-bacnet-driver
+```
+
+6.  Install a BACnet Driver onto the Platform Driver.
+
+Installing a BACnet driver in the Platform Driver Agent requires adding copies of the device configuration and registry configuration files to the Platform Driver’s configuration store.
+
+Create a config directory and navigate to it:
+
+```shell
+mkdir config
+cd config
+```
+Create a file called `bacnet.config`; it should contain a JSON object that specifies the configuration of your BACnet driver. The following JSON is an example:
+
+```json
+{
+    "driver_config": {"device_address": "123.45.67.890",
+                      "device_id": 123456},
+    "driver_type": "bacnet",
+    "registry_config":"config://bacnet.csv",
+    "interval": 15,
+    "timezone": "US/Pacific"
+}
+```
+
+Create another file called `bacnet.csv`; it should contain all the points on the device that you want published to Volttron. The following CSV file is an example:
+
+```csv
+Point Name,Volttron Point Name,Units,Unit Details,BACnet Object Type,Property,Writable,Index,Notes
+3820a/Field Bus.3820A CHILLER.AHU-COIL-CHWR-T,3820a/Field Bus.3820A CHILLER.AHU-COIL-CHWR-T,degreesFahrenheit,-50.00 to 250.00,analogInput,presentValue,FALSE,3000741,,Primary CHW Return Temp
+```
+
+Add the bacnet driver config and bacnet csv file to the Platform Driver configuration store:
+
+```
+vctl config store platform.driver bacnet.csv bacnet.csv --csv
+vctl config store platform.driver devices/bacnet bacnet1.config
+```
+
+7. Observe Data
+
+To see data being published to the bus, install a [Listener Agent](https://pypi.org/project/volttron-listener/):
+
+```
+vctl install volttron-listener --start
+```
+
+Once installed, you should see the data being published by viewing the Volttron logs file that was created in step 2.
+To watch the logs, open a separate terminal and run the following command:
+
+```
+tail -f <path to folder containing volttron.log>/volttron.log
 ```
 
 # Development
 
-## Environment
+Please see the following for contributing guidelines [contributing](https://github.com/eclipse-volttron/volttron-core/blob/develop/CONTRIBUTING.md).
 
-Set the environment to be in your project directory:
+Please see the following helpful guide about [developing modular VOLTTRON agents](https://github.com/eclipse-volttron/volttron-core/blob/develop/DEVELOPING_ON_MODULAR.md)
 
-```poetry config virtualenvs.in-project true```
+# Disclaimer Notice
 
-If you want to install all your dependencies, including dependencies to help with developing your agent, run this command:
+This material was prepared as an account of work sponsored by an agency of the
+United States Government.  Neither the United States Government nor the United
+States Department of Energy, nor Battelle, nor any of their employees, nor any
+jurisdiction or organization that has cooperated in the development of these
+materials, makes any warranty, express or implied, or assumes any legal
+liability or responsibility for the accuracy, completeness, or usefulness or any
+information, apparatus, product, software, or process disclosed, or represents
+that its use would not infringe privately owned rights.
 
-```poetry install```
-
-If you want to install only the dependencies needed to run your agent, run this command:
-
-```poetry install --no-dev```
-
-Activate the virtual environment:
-
-```shell
-# using Poetry
-poetry shell
-
-# using 'source' command
-source "$(poetry env info --path)/bin/activate"
-```
-
-## Source Control
-
-1. To use git to manage version control, create a new git repository in your local agent project.
-
-```git init```
-
-2. Then create a new repo in your Github or Gitlab account. Copy the URL that points to that new repo in
-your Github or Gitlab account. This will be known as our 'remote'.
-
-3. Add the remote (i.e. the new repo URL from your Github or Gitlab account) to your local repository. Run the following command:
-
-```git remote add origin <my github/gitlab URL>```
-
-When you push to your repo, note that the default branch is called 'main'.
-
-
-## Optional Configurations
-
-### Precommit
-
-Note: Ensure that you have created the virtual environment using Poetry
-
-Install pre-commit hooks:
-
-```poetry run pre-commit install```
-
-To run pre-commit on all your files, run this command:
-
-```poetry run pre-commit run --all-files```
-
-If you have precommit installed and you want to ignore running the commit hooks
-every time you run a commit, include the `--no-verify` flag in your commit. The following
-is an example:
-
-```git commit -m "Some message" --no-verify```
-
-
-# Publishing to PyPi
-
-Publishing your Driver module to PyPi is automated through the continuous integration workflow provided in `~/.github/workflows/publish_to_pypi.yml`.
-You can update that Github Workflow with your credentials to ensure that publishing to PyPi will succeed. The default behavior of
-that workflow is to publish to PyPi when a release has been published. If you want to change this behavior, you can modify the
-workflow to publish to PyPi based on whatever desired event; see [Github Workflows docs](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow)
-on how to change the events that trigger a workflow.
-
-
-# Documentation
-
-To build the docs, navigate to the 'docs' directory and build the documentation:
-
-```shell
-cd docs
-make html
-```
-
-After the documentation is built, view the documentation in html form in your browser.
-The html files will be located in `~<path to project directory>/docs/build/html`.
-
-**PROTIP: To open the landing page of your documentation directly from the command line, run the following command:**
-
-```shell
-open <path to project directory>/docs/build/html/index.html
-```
-
-This will open the documentation landing page in your default browsert (e.g. Chrome, Firefox).
+Reference herein to any specific commercial product, process, or service by
+trade name, trademark, manufacturer, or otherwise does not necessarily
+constitute or imply its endorsement, recommendation, or favoring by the United
+States Government or any agency thereof, or Battelle Memorial Institute. The
+views and opinions of authors expressed herein do not necessarily state or
+reflect those of the United States Government or any agency thereof.

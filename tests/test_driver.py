@@ -1,6 +1,6 @@
 """Unit tests for volttron-lib-bacnet-driver"""
 
-from volttron.driver.interfaces.bacnet.bacnet import BaseInterface, BACnet
+from volttron.driver.interfaces.bacnet.bacnet import BACnet, BaseInterface
 
 
 def test_driver():

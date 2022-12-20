@@ -1,5 +1,5 @@
 [build-system]
-requires = ["poetry-core>=1.1.0a6"]
+requires = ["poetry-core>=1.2.2"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.isort]
@@ -12,8 +12,8 @@ description = "BACnet driver supported and maintained by the Volttron team."
 authors = ["Mark Bonicillo <volttron@pnnl.gov>"]
 license = "Apache License 2.0"
 readme = "README.md"
-repository = "https://github.com/VOLTTRON/volttron-lib-bacnet-driver"
-homepage = "https://github.com/VOLTTRON/volttron-lib-bacnet-driver"
+repository = "https://github.com/eclipse-volttron/volttron-lib-bacnet-driver"
+homepage = "https://github.com/eclipse-volttron/volttron-lib-bacnet-driver"
 keywords = []
 packages = [ { include = "volttron", from = "src" } ]
 classifiers = [
@@ -27,10 +27,11 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.8,<4.0"
-volttron-lib-base-driver = {git = "https://github.com/VOLTTRON/volttron-lib-base-driver.git", branch = "develop"}
+volttron-lib-base-driver = "^0.2.0rc0"
+bacpypes = "0.16.7"
 
 [tool.poetry.group.dev.dependencies]
-volttron-testing = "^0.3.1a3"
+volttron-testing = "^0.4.0rc0"
 pytest = "^6.2.5"
 pytest-cov = "^3.0.0"
 mock = "^4.0.3"
@@ -40,6 +41,7 @@ toml = "^0.10.2"
 mypy = "^0.942"
 coverage = "^6.3.2"
 isort = "^5.10.1"
+pytest-sugar = "^0.9.6"
 
 [tool.poetry.group.documentation.dependencies]
 Sphinx = "^4.5.0"

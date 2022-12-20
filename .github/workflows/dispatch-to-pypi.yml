@@ -1,10 +1,9 @@
 # Documentation located
 # https://github.com/marketplace/actions/publish-python-poetry-package
-name: Publish to PyPi
+name: Dispatch to PyPi
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
 
 defaults:
   run:
@@ -19,7 +18,7 @@ jobs:
 
   publish_to_pypi:
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
     - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."

@@ -1,6 +1,6 @@
 # volttron-lib-bacnet-driver
 
-![Passing?](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run_tests.yml/badge.svg)
+![Passing?](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run-tests.yml/badge.svg)
 [![pypi version](https://img.shields.io/pypi/v/volttron-lib-bacnet-driver.svg)](https://pypi.org/project/volttron-lib-bacnet-driver/)
 
 # Prerequisites

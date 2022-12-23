@@ -2,9 +2,6 @@
 requires = ["poetry-core>=1.2.2"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.isort]
-profile = "black"
-
 [tool.poetry]
 name = "volttron-lib-bacnet-driver"
 version = "0.1.0"
@@ -43,7 +40,7 @@ coverage = "^6.3.2"
 isort = "^5.10.1"
 pytest-sugar = "^0.9.6"
 
-[tool.poetry.group.documentation.dependencies]
+[tool.poetry.group.docs.dependencies]
 Sphinx = "^4.5.0"
 sphinx-rtd-theme = "^1.0.0"
 

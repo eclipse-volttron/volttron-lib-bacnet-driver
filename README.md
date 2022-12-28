@@ -44,12 +44,10 @@ python -m venv env
 source env/bin/activate
 ```
 
-2. Install volttron and start the platform.
+2. Installing volttron-platform-driver requires a running volttron instance. Install volttron and start an instance in the background and save log output to a file named 'volttron.log'
 
 ```shell
 pip install volttron
-
-# Start platform with output going to volttron.log
 volttron -vv -l volttron.log &
 ```
 
@@ -62,7 +60,9 @@ vctl install volttron-platform-driver --vip-identity platform.driver --start
 4. Install the BACnetProxy agent:
 
 ```shell
-vctl install volttron-bacnet-proxy --agent-config <path to bacnet proxy agent configuration file>
+vctl install volttron-bacnet-proxy --agent-config <path to bacnet proxy agent configuration file> \
+--vip-identity platform.bacnet_proxy \
+--start
 ```
 
 5.  Install the volttron bacnet driver library:
@@ -75,13 +75,14 @@ pip install volttron-lib-bacnet-driver
 
 Installing a BACnet driver in the Platform Driver Agent requires adding copies of the device configuration and registry configuration files to the Platform Driver’s configuration store.
 
-Create a config directory and navigate to it:
+* Create a config directory and navigate to it:
 
 ```shell
 mkdir config
 cd config
 ```
-Create a file called `bacnet.config`; it should contain a JSON object that specifies the configuration of your BACnet driver. The following JSON is an example:
+
+* Create a file called `bacnet.config`; it should contain a JSON object that specifies the configuration of your BACnet driver. An example of such a file is provided at the root of this project; the example file is named 'bacnet.config'. The following JSON is an example of a `bacnet.config`:
 
 ```json
 {
@@ -94,18 +95,20 @@ Create a file called `bacnet.config`; it should contain a JSON object that speci
 }
 ```
 
-Create another file called `bacnet.csv`; it should contain all the points on the device that you want published to Volttron. The following CSV file is an example:
+ ℹ️ **TIP:** In the `driver_config`, `device_address` is the address bound to the network port over which BACnet communication will happen on the computer running VOLTTRON. This is NOT the address of any target device. See [BACnet Router Addressing](https://volttron.readthedocs.io/en/develop/agent-framework/driver-framework/bacnet/bacnet-router-addressing.html#bacnet-router-addressing).
+
+* Create another file called `bacnet.csv`; it should contain all the points on the device that you want published to Volttron. An example of such a CSV file is provided at the root of this project; the example CSV file is named 'bacnet.csv'. The following CSV file is an example:
 
 ```csv
 Point Name,Volttron Point Name,Units,Unit Details,BACnet Object Type,Property,Writable,Index,Notes
-3820a/Field Bus.3820A CHILLER.AHU-COIL-CHWR-T,3820a/Field Bus.3820A CHILLER.AHU-COIL-CHWR-T,degreesFahrenheit,-50.00 to 250.00,analogInput,presentValue,FALSE,3000741,,Primary CHW Return Temp
+12345a/Field Bus.12345A CHILLER.AHU-COIL-CHWR-T,12345a/Field Bus.12345A CHILLER.AHU-COIL-CHWR-T,degreesFahrenheit,-50.00 to 250.00,analogInput,presentValue,FALSE,3000741,,Primary CHW Return Temp
 ```
 
-Add the bacnet driver config and bacnet csv file to the Platform Driver configuration store:
+* Add the bacnet driver config and bacnet csv file to the Platform Driver configuration store:
 
 ```
 vctl config store platform.driver bacnet.csv bacnet.csv --csv
-vctl config store platform.driver devices/bacnet bacnet1.config
+vctl config store platform.driver devices/bacnet bacnet.config
 ```
 
 7. Observe Data

@@ -3,77 +3,43 @@
 [![Passing?](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run-tests.yml/badge.svg)](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run-tests.yml)
 [![pypi version](https://img.shields.io/pypi/v/volttron-lib-bacnet-driver.svg)](https://pypi.org/project/volttron-lib-bacnet-driver/)
 
-# Prerequisites
+# Requires
 
-* Python 3.8
+* python >= 3.10
+* volttron >= 10.0
+* bacpypes == "0.16.7"
+* volttron-lib-base-driver
+* volttron-bacnet-proxy
 
-## Python
-
-<details>
-<summary>To install Python 3.8, we recommend using <a href="https://github.com/pyenv/pyenv"><code>pyenv</code></a>.</summary>
-
-```bash
-# install pyenv
-git clone https://github.com/pyenv/pyenv ~/.pyenv
-
-# setup pyenv (you should also put these three lines in .bashrc or similar)
-export PATH="${HOME}/.pyenv/bin:${PATH}"
-export PYENV_ROOT="${HOME}/.pyenv"
-eval "$(pyenv init -)"
-
-# install Python 3.8
-pyenv install 3.8.10
-
-# make it available globally
-pyenv global system 3.8.10
-```
-</details>
-
-
-## Poetry
-
-This project uses `poetry` to install and manage dependencies. To install poetry,
-follow these [instructions](https://python-poetry.org/docs/master/#installation).
+# Documentation
+More detailed documentation can be found on [ReadTheDocs](https://volttron.readthedocs.io/en/modular/). The RST source
+of the documentation for this component is located in the "docs" directory of this repository.
 
 # Installation
 
-1. Create and activate a virtual environment.
+Before installing the VOLTTRON Modbus driver, VOLTTRON should be installed and running.
+Its virtual environment should be active. Information on how to install
+of the VOLTTRON platform can be found [here](https://github.com/eclipse-volttron/volttron-core).
+
+1. If it is not already, install the VOLTTRON Platform Driver Agent:
+
+    ```shell
+    vctl install volttron-platform-driver --vip-identity platform.driver --start
+    ```
+
+2. Install the BACnetProxy agent:
 
 ```shell
-python -m venv env
-source env/bin/activate
+vctl install volttron-bacnet-proxy --vip-identity platform.bacnet_proxy --start
 ```
 
-2. Installing volttron-platform-driver requires a running volttron instance. Install volttron and start an instance in the background and save log output to a file named 'volttron.log'
-
-```shell
-pip install volttron
-volttron -vv -l volttron.log &
-```
-
-3. Install the volttron platform driver:
-
-```shell
-vctl install volttron-platform-driver --vip-identity platform.driver --start
-```
-
-4. Install the BACnetProxy agent:
-
-```shell
-vctl install volttron-bacnet-proxy --agent-config <path to bacnet proxy agent configuration file> \
---vip-identity platform.bacnet_proxy \
---start
-```
-
-5.  Install the volttron bacnet driver library:
+3. Install the volttron bacnet driver library:
 
 ```shell
 pip install volttron-lib-bacnet-driver
 ```
 
-6.  Install a BACnet Driver onto the Platform Driver.
-
-Installing a BACnet driver in the Platform Driver Agent requires adding copies of the device configuration and registry configuration files to the Platform Driver’s configuration store.
+4. Store device and registry files for the BACnet device to the Platform Driver configuration store:
 
 * Create a config directory and navigate to it:
 
@@ -111,7 +77,7 @@ vctl config store platform.driver bacnet.csv bacnet.csv --csv
 vctl config store platform.driver devices/bacnet bacnet.config
 ```
 
-7. Observe Data
+5. Observe Data
 
 To see data being published to the bus, install a [Listener Agent](https://pypi.org/project/volttron-listener/):
 

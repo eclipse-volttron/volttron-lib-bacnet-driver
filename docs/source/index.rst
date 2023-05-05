@@ -136,5 +136,3 @@ in the volttron-lib-bacnet-driver repository.
    :hidden:
 
    BACnet Proxy Agent <external-docs/volttron-bacnet-proxy/docs/source/index>
-#   BACnet Autoconfiguration <bacnet-auto-configuration>
-

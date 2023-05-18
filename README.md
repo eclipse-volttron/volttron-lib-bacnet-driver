@@ -1,5 +1,7 @@
 # volttron-lib-bacnet-driver
 
+![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)
+![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)
 [![Passing?](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run-tests.yml/badge.svg)](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run-tests.yml)
 [![pypi version](https://img.shields.io/pypi/v/volttron-lib-bacnet-driver.svg)](https://pypi.org/project/volttron-lib-bacnet-driver/)
 
@@ -28,69 +30,69 @@ Information on how to install of the VOLTTRON platform can be found
     ```
 
 2. Install the BACnetProxy agent:
-
-```shell
-vctl install volttron-bacnet-proxy --vip-identity platform.bacnet_proxy --start
-```
+   
+   ```shell
+   vctl install volttron-bacnet-proxy --vip-identity platform.bacnet_proxy --start
+   ```
 
 3. Install the volttron bacnet driver library:
-
-```shell
-pip install volttron-lib-bacnet-driver
-```
+   
+   ```shell
+   pip install volttron-lib-bacnet-driver
+   ```
 
 4. Store device and registry files for the BACnet device to the Platform Driver configuration store:
 
-* Create a config directory and navigate to it:
+   * Create a config directory and navigate to it:
 
-```shell
-mkdir config
-cd config
-```
+      ```shell
+      mkdir config
+      cd config
+      ```
 
-* Create a file called `bacnet.config`; it should contain a JSON object that specifies the configuration of your BACnet driver. An example of such a file is provided at the root of this project; the example file is named 'bacnet.config'. The following JSON is an example of a `bacnet.config`:
+   * Create a file called `bacnet.config`; it should contain a JSON object that specifies the configuration of your BACnet driver. An example of such a file is provided at the root of this project; the example file is named 'bacnet.config'. The following JSON is an example of a `bacnet.config`:
 
-```json
-{
-    "driver_config": {"device_address": "123.45.67.890",
-                      "device_id": 123456},
-    "driver_type": "bacnet",
-    "registry_config":"config://bacnet.csv",
-    "interval": 15,
-    "timezone": "US/Pacific"
-}
-```
+       ```json
+       {
+           "driver_config": {"device_address": "123.45.67.890",
+                             "device_id": 123456},
+           "driver_type": "bacnet",
+           "registry_config":"config://bacnet.csv",
+           "interval": 15,
+           "timezone": "US/Pacific"
+       }
+       ```
 
- ℹ️ **TIP:** In the `driver_config`, `device_address` is the address bound to the network port over which BACnet communication will happen on the computer running VOLTTRON. This is NOT the address of any target device. See [BACnet Router Addressing](https://volttron.readthedocs.io/en/develop/agent-framework/driver-framework/bacnet/bacnet-router-addressing.html#bacnet-router-addressing).
+       ℹ️ **TIP:** In the `driver_config`, `device_address` is the address bound to the network port over which BACnet communication will happen on the computer running VOLTTRON. This is NOT the address of any target device. See [BACnet Router Addressing](https://volttron.readthedocs.io/en/develop/agent-framework/driver-framework/bacnet/bacnet-router-addressing.html#bacnet-router-addressing).
 
-* Create another file called `bacnet.csv`; it should contain all the points on the device that you want published to Volttron. An example of such a CSV file is provided at the root of this project; the example CSV file is named 'bacnet.csv'. The following CSV file is an example:
+   * Create another file called `bacnet.csv`; it should contain all the points on the device that you want published to Volttron. An example of such a CSV file is provided at the root of this project; the example CSV file is named 'bacnet.csv'. The following CSV file is an example:
 
-```csv
-Point Name,Volttron Point Name,Units,Unit Details,BACnet Object Type,Property,Writable,Index,Notes
-12345a/Field Bus.12345A CHILLER.AHU-COIL-CHWR-T,12345a/Field Bus.12345A CHILLER.AHU-COIL-CHWR-T,degreesFahrenheit,-50.00 to 250.00,analogInput,presentValue,FALSE,3000741,,Primary CHW Return Temp
-```
+      ```csv
+      Point Name,Volttron Point Name,Units,Unit Details,BACnet Object Type,Property,Writable,Index,Notes
+      12345a/Field Bus.12345A CHILLER.AHU-COIL-CHWR-T,12345a/Field Bus.12345A CHILLER.AHU-COIL-CHWR-T,degreesFahrenheit,-50.00 to 250.00,analogInput,presentValue,FALSE,3000741,,Primary CHW Return Temp
+      ```
 
-* Add the bacnet driver config and bacnet csv file to the Platform Driver configuration store:
+   * Add the bacnet driver config and bacnet csv file to the Platform Driver configuration store:
 
-```
-vctl config store platform.driver bacnet.csv bacnet.csv --csv
-vctl config store platform.driver devices/bacnet bacnet.config
-```
+      ```
+      vctl config store platform.driver bacnet.csv bacnet.csv --csv
+      vctl config store platform.driver devices/bacnet bacnet.config
+      ```
 
 5. Observe Data
 
-To see data being published to the bus, install a [Listener Agent](https://pypi.org/project/volttron-listener/):
+    To see data being published to the bus, install a [Listener Agent](https://pypi.org/project/volttron-listener/):
 
-```
-vctl install volttron-listener --start
-```
+   ```
+   vctl install volttron-listener --start
+   ```
 
-Once installed, you should see the data being published by viewing the Volttron logs file that was created in step 2.
-To watch the logs, open a separate terminal and run the following command:
+    Once installed, you should see the data being published by viewing the Volttron logs file that was created in step 2.
+    To watch the logs, open a separate terminal and run the following command:
 
-```
-tail -f <path to folder containing volttron.log>/volttron.log
-```
+   ```
+   tail -f <path to folder containing volttron.log>/volttron.log
+   ```
 
 # Development
 

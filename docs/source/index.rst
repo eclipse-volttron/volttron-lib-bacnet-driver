@@ -135,4 +135,4 @@ in the volttron-lib-bacnet-driver repository.
 .. toctree::
    :hidden:
 
-   BACnet Proxy Agent <external-docs/volttron-bacnet-proxy/docs/source/index>
+   BACnet Proxy Agent <external-docs/volttron-bacnet-proxy/index>

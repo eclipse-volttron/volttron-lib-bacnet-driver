@@ -65,7 +65,7 @@ Information on how to install of the VOLTTRON platform can be found
          }
          ```
 
-         ℹ️ **TIP:** In the `driver_config`, `device_address` is the address bound to the network port over which BACnet communication will happen on the computer running VOLTTRON. This is NOT the address of any target device. See [BACnet Router Addressing](https://volttron.readthedocs.io/en/develop/agent-framework/driver-framework/bacnet/bacnet-router-addressing.html#bacnet-router-addressing).
+         ℹ️ **TIP:** In the `driver_config`, `device_address` is the address bound to the network port over which BACnet communication will happen on the computer running VOLTTRON. This is NOT the address of any target device. See [BACnet Router Addressing](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-bacnet-proxy/docs/source/bacnet-router-addressing.html).
 
     * Create another file called `bacnet.csv`; it should contain all the points on the device that you want published to Volttron. An example of such a CSV file is provided at the root of this project; the example CSV file is named 'bacnet.csv'. The following CSV file is an example:
 

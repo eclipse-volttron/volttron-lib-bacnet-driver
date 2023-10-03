@@ -23,8 +23,8 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<4.0"
-volttron-lib-base-driver = "^0.2.0rc0"
+python = "^3.10"
+volttron-lib-base-driver = "^0.2.1rc2"
 bacpypes = "0.16.7"
 
 [tool.poetry.group.dev.dependencies]

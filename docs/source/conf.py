@@ -62,44 +62,44 @@ html_theme = 'sphinx_rtd_theme'
 # epub_show_urls = 'footnote'
 
 
-script_dir = os.path.dirname(os.path.realpath(__file__))
-agent_docs_root = os.path.join(script_dir, "agent-docs")
-
-# Custom event handlers for Volttron #
-def setup(app):
-    """
-    Registers callback method on sphinx events. callback method used to
-    dynamically generate api-docs rst files which are then converted to html
-    by readthedocs
-    :param app:
-    """
-    # app.connect('builder-inited', generate_apidoc)
-    app.connect('builder-inited', generate_agent_docs)
-
-    # app.connect('build-finished', clean_api_rst)
-    app.connect('build-finished', clean_agent_docs_rst)
-
-
-def generate_agent_docs(app):
-    agent_name = 'volttron-bacnet-proxy'
-    agent_repo = f'https://github.com/eclipse-volttron/{agent_name}'
-    docs_source_dir = 'docs/source'
-    agent_version = 'releases/0.2.0-rc'
-    agent_clone_dir = os.path.join(agent_docs_root, agent_name)
-
-    subprocess.check_call(["git", "clone", "--no-checkout", agent_repo], cwd=agent_docs_root)
-    subprocess.check_call(["git", "sparse-checkout", "set", docs_source_dir], cwd=agent_clone_dir)
-    subprocess.check_call(["git", "checkout", agent_version], cwd=agent_clone_dir)
-
-def clean_agent_docs_rst(app, exception):
-    """
-    Deletes folder containing all auto generated .rst files at the end of
-    sphinx build immaterial of the exit state of sphinx build.
-    :param app:
-    :param exception:
-    """
-    global agent_docs_root
-    import shutil
-    if os.path.exists(agent_docs_root):
-        print("Cleanup: Removing agent docs clone directory {}".format(agent_docs_root))
-        shutil.rmtree(agent_docs_root)
+# script_dir = os.path.dirname(os.path.realpath(__file__))
+# agent_docs_root = os.path.join(script_dir, "external-docs")
+#
+# # Custom event handlers for Volttron #
+# def setup(app):
+#     """
+#     Registers callback method on sphinx events. callback method used to
+#     dynamically generate api-docs rst files which are then converted to html
+#     by readthedocs
+#     :param app:
+#     """
+#     # app.connect('builder-inited', generate_apidoc)
+#     app.connect('builder-inited', generate_agent_docs)
+#
+#     # app.connect('build-finished', clean_api_rst)
+#     app.connect('build-finished', clean_agent_docs_rst)
+#
+#
+# def generate_agent_docs(app):
+#     agent_name = 'volttron-bacnet-proxy'
+#     agent_repo = f'https://github.com/eclipse-volttron/{agent_name}'
+#     docs_source_dir = 'docs/source'
+#     agent_version = 'releases/0.2.0-rc'
+#     agent_clone_dir = os.path.join(agent_docs_root, agent_name)
+#
+#     subprocess.check_call(["git", "clone", "--no-checkout", agent_repo], cwd=agent_docs_root)
+#     subprocess.check_call(["git", "sparse-checkout", "set", docs_source_dir], cwd=agent_clone_dir)
+#     subprocess.check_call(["git", "checkout", agent_version], cwd=agent_clone_dir)
+#
+# def clean_agent_docs_rst(app, exception):
+#     """
+#     Deletes folder containing all auto generated .rst files at the end of
+#     sphinx build immaterial of the exit state of sphinx build.
+#     :param app:
+#     :param exception:
+#     """
+#     global agent_docs_root
+#     import shutil
+#     if os.path.exists(agent_docs_root):
+#         print("Cleanup: Removing agent docs clone directory {}".format(agent_docs_root))
+#         shutil.rmtree(agent_docs_root)

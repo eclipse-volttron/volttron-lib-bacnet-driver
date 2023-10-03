@@ -78,8 +78,8 @@ Here is an example device configuration file:
         "heart_beat_point": "heartbeat"
     }
 
-A `sample BACnet configuration file <https://raw.githubusercontent.com/VOLTTRON/volttron/c57569bd9e71eb32afefe8687201d674651913ed/examples/configurations/drivers/bacnet1.config>`_
-can be found in the VOLTTRON repository at `examples/configurations/drivers/bacnet1.config`
+A `sample BACnet configuration file <https://raw.githubusercontent.com/eclipse-volttron/volttron-lib-bacnet-driver/main/bacnet.config>`_
+can be found in the `bacnet.config` file of the volttron-lib-bacnet-driver repository.
 
 
 .. _BACnet-Registry-Configuration-File:
@@ -146,8 +146,8 @@ information about a point.
         Building/FCB.Local Application.SF-O,SupplyFanSpeedOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,presentValue,TRUE,3000113,Resolution: 0.1
 
 
-A sample BACnet registry file can be found `here <https://raw.githubusercontent.com/VOLTTRON/volttron/c57569bd9e71eb32afefe8687201d674651913ed/examples/configurations/drivers/bacnet.csv>`_ or
-in the VOLTTRON repository in `examples/configurations/drivers/bacnet.csv`
+A `sample BACnet registry file <https://raw.githubusercontent.com/eclipse-volttron/volttron-lib-bacnet-driver/main/bacnet.csv>`_ can be found as
+the `bacnet.csv` file in the volttron-lib-bacnet-driver` repository.
 
 
 .. toctree::

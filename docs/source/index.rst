@@ -8,28 +8,12 @@ BACnet Driver Configuration
 ===========================
 
 Communicating with BACnet devices requires that the :ref:`BACnet Proxy Agent <BACnet-Proxy-Agent>` is configured and
-running.  All device communication happens through this agent.
-
-
-Requirements
-------------
-The BACnet driver requires the BACPypes package. This package can be installed in an activated environment with:
+running.  All device communication happens through this agent.  The BACnet Proxy Agent can be installed from PyPi
+using vctl:
 
 .. code-block:: bash
 
-    pip install bacpypes
-
-Alternatively, running :ref:`bootstrap.py <Platform-Installation>` with the ``--drivers`` option will install all
-requirements for drivers included in the repository including BACnet.
-
-.. code-block:: bash
-
-    python3 bootstrap.py --drivers
-
-.. warning::
-
-    Current versions of VOLTTRON support **only** BACPypes version 0.16.7
-
+    vctl install volttron-bacnet-driver
 
 .. _BACnet-Configuration-File:
 
@@ -58,8 +42,7 @@ There are nine arguments for the `driver_config` section of the device configura
       Be aware that setting this to false will cause scrapes for that device to take much longer. Only change if needed.
       Defaults to true
     - **cov_lifetime** - (Optional) When a device establishes a change of value subscription for a point, this argument
-      will be used to determine the lifetime and renewal period for the subscription, in seconds. Defaults to 180
-      (Added to Platform Driver version 3.2)
+      will be used to determine the lifetime and renewal period for the subscription, in seconds. (Defaults to 180)
 
 Here is an example device configuration file:
 
@@ -78,8 +61,8 @@ Here is an example device configuration file:
         "heart_beat_point": "heartbeat"
     }
 
-A `sample BACnet configuration file <https://raw.githubusercontent.com/eclipse-volttron/volttron-lib-bacnet-driver/main/bacnet.config>`_
-can be found in the `bacnet.config` file of the volttron-lib-bacnet-driver repository.
+A sample BACnet configuration file can be found `here <https://raw.githubusercontent.com/eclipse-volttron/volttron-lib-bacnet-driver/main/bacnet.config>`_ or
+in the volttron-lib-bacnet-driver repository.
 
 
 .. _BACnet-Registry-Configuration-File:
@@ -90,8 +73,9 @@ BACnet Registry Configuration File
 The registry configuration file is a `CSV <https://en.wikipedia.org/wiki/Comma-separated_values>`_ file. Each row
 configures a point on the device.
 
-Most of the configuration file can be generated with the `grab_bacnet_config.py` utility in `scripts/bacnet`. See
-:ref:`BACnet Auto-Configuration <BACnet-Auto-Configuration>`.
+..
+    #    Most of the configuration file can be generated with the `grab_bacnet_config.py` utility in `scripts/bacnet`. See
+    #    :ref:`BACnet Auto-Configuration <BACnet-Auto-Configuration>`.
 
 Currently, the driver provides no method to access array type properties even if the members of the array are of a
 supported type.
@@ -99,9 +83,7 @@ supported type.
 The following columns are required for each row:
 
     - **Volttron Point Name** - The name by which the platform and agents running on the platform will refer to this
-      point.  For instance, if the Volttron Point Name is `HeatCall1` (and using the example device configuration above)
-      then an agent would use `pnnl/isb2/hvac1/HeatCall1` to refer to the point when using the RPC interface of the
-      Actuator agent
+      point.
     - **Units** - Used for meta data when creating point information on the historian.
     - **BACnet Object Type** - A string representing what kind of BACnet standard object the point belongs to. Examples
       include:
@@ -127,7 +109,7 @@ The following columns are optional:
       leaving the column blank will use the default priority of 16
     - **COV Flag** - Either `True` or `False`.  Determines if a BACnet Change-of-Value subscription should be
       established for this point.  Missing this column or leaving the column blank will result in no change of value
-      subscriptions being established. (Added to Platform Driver version 3.2)
+      subscriptions being established.
 
 Any additional columns will be ignored. It is common practice to include a `Point Name` or `Reference Point Name`
 column to include the device documentation's name for the point and `Notes` and `Unit Details` columns for additional
@@ -146,12 +128,11 @@ information about a point.
         Building/FCB.Local Application.SF-O,SupplyFanSpeedOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,presentValue,TRUE,3000113,Resolution: 0.1
 
 
-A `sample BACnet registry file <https://raw.githubusercontent.com/eclipse-volttron/volttron-lib-bacnet-driver/main/bacnet.csv>`_ can be found as
-the `bacnet.csv` file in the volttron-lib-bacnet-driver` repository.
+A sample BACnet registry file can be found `here <https://raw.githubusercontent.com/eclipse-volttron/volttron-lib-bacnet-driver/main/bacnet.csv>`_ or
+in the volttron-lib-bacnet-driver repository.
 
 
 .. toctree::
+   :hidden:
 
-   bacnet-proxy-agent
-   bacnet-auto-configuration
-   bacnet-router-addressing
+   BACnet Proxy Agent <external-docs/volttron-bacnet-proxy/docs/source/index>

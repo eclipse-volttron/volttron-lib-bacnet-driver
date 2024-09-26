@@ -120,9 +120,8 @@ class BACnet(BaseInterface):
     REGISTER_CONFIG_CLASS = BacnetPointConfig
     INTERFACE_CONFIG_CLASS = BacnetRemoteConfig
 
-    def __init__(self, **kwargs):
-        super(BACnet, self).__init__(**kwargs)
-        self.config = None
+    def __init__(self, config, **kwargs):
+        super(BACnet, self).__init__(config, **kwargs)
         self.register_count_divisor = 1
 
         self.scheduled_ping = None
@@ -133,8 +132,7 @@ class BACnet(BaseInterface):
 
     def finalize_setup(self, initial_setup: bool = False):
         if initial_setup is True:
-            self.ping_target()  # TODO: This causes a race condition here. How to solve this,
-                             # TODO:  both for this line and for other drivers that may take a while to configure?
+            self.ping_target()
 
     def create_register(self, register_definition: BacnetPointConfig) -> BACnetRegister:
         if register_definition.write_priority < self.config.min_priority:
@@ -181,7 +179,6 @@ class BACnet(BaseInterface):
             _log.warning("Error trying to ping device.")
 
         self.scheduled_ping = None
-
         # Schedule retry.
         if not pinged:
             self.schedule_ping()

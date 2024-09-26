@@ -23,16 +23,18 @@
 # }}}
 
 import logging
+
 from datetime import datetime, timedelta
+from pydantic import computed_field, Field
 
 from volttron.client.vip.agent import errors
+from volttron.driver.base.config import PointConfig, RemoteConfig
 from volttron.driver.base.driver_exceptions import DriverConfigError
 from volttron.driver.base.interfaces import BaseInterface, BaseRegister
 from volttron.utils.jsonrpc import RemoteError
 
 _log = logging.getLogger(__name__)
 
-DEFAULT_COV_LIFETIME = 180
 COV_UPDATE_BUFFER = 3
 BACNET_TYPE_MAPPING = {
     "multiStateValue": int,
@@ -47,6 +49,45 @@ BACNET_TYPE_MAPPING = {
 }
 
 
+class BacnetPointConfig(PointConfig):
+    array_index: int | None = None # TODO: Is this the correct default for this? What is it?
+    bacnet_object_type: str = Field(alias='BACnet Object Type')
+    property: str = Field(alias='Property')  # TODO: Should be an Enum of BACnet property types.
+    index: int = Field(alias='Index')
+    cov_flag: bool = Field(default=False, alias='COV Flag')
+    write_priority: int | None = Field(default=16, ge=1, le=16, alias='Write Priority')
+
+
+class BacnetRemoteConfig(RemoteConfig):
+    min_priority: int = Field(default=8, ge=1, le=16)
+    target_address: str = Field(alias="device_address")
+    device_id: int = Field(ge=0)
+    configured_cov_lifetime: float = Field(default=180.0, alias='cov_lifetime')
+    proxy_vip_identity: str = Field(alias="proxy_address", default="platform.bacnet_proxy")
+    max_per_request: int = Field(ge=0, default=24)
+    use_read_multiple: bool = True
+    timeout: float = Field(ge=0, default=30.0)
+    configured_ping_retry_interval: float = Field(alias='ping_retry_interval', default=5.0)
+
+    @computed_field
+    @property
+    def ping_retry_interval(self) -> timedelta:
+        return timedelta(seconds=self.configured_ping_retry_interval)
+
+    @ping_retry_interval.setter
+    def ping_retry_interval(self, v):
+        self.configured_ping_retry_interval = v
+
+    @computed_field
+    @property
+    def cov_lifetime(self) -> timedelta:
+        return timedelta(seconds=self.configured_cov_lifetime)
+
+    @cov_lifetime.setter
+    def cov_lifetime(self, v):
+            self.configured_cov_lifetime = v
+
+
 class BACnetRegister(BaseRegister):
 
     def __init__(self,
@@ -58,7 +99,8 @@ class BACnetRegister(BaseRegister):
                  units,
                  description='',
                  priority=None,
-                 list_index=None):
+                 list_index=None,
+                 is_cov=False):
         super(BACnetRegister, self).__init__("byte",
                                              read_only,
                                              point_name,
@@ -70,40 +112,56 @@ class BACnetRegister(BaseRegister):
         self.priority = priority
         self.index = list_index
         self.python_type = BACNET_TYPE_MAPPING[object_type]
+        self.is_cov = is_cov
 
 
 class BACnet(BaseInterface):
 
+    REGISTER_CONFIG_CLASS = BacnetPointConfig
+    INTERFACE_CONFIG_CLASS = BacnetRemoteConfig
+
     def __init__(self, **kwargs):
         super(BACnet, self).__init__(**kwargs)
-        self.register_count = 10000
+        self.config = None
         self.register_count_divisor = 1
-        self.cov_points = []
 
-    def configure(self, config_dict, registry_config_str):
-        self.min_priority = config_dict.get("min_priority", 8)
-        self.parse_config(registry_config_str)
-        self.target_address = config_dict.get("device_address")
-        self.device_id = int(config_dict.get("device_id"))
-        self.cov_lifetime = config_dict.get("cov_lifetime", DEFAULT_COV_LIFETIME)
-        self.proxy_address = config_dict.get("proxy_address", "platform.bacnet_proxy")
-        self.max_per_request = config_dict.get("max_per_request", 24)
-        self.use_read_multiple = config_dict.get("use_read_multiple", True)
-        self.timeout = float(config_dict.get("timeout", 30.0))
-
-        self.ping_retry_interval = timedelta(seconds=config_dict.get("ping_retry_interval", 5.0))
         self.scheduled_ping = None
 
-        self.ping_target()
+    @property
+    def register_count(self):
+        return len(self.registers)
 
-        # list of points to establish change of value subscriptions with, generated from the registry config
-        for point_name in self.cov_points:
-            self.establish_cov_subscription(point_name, self.cov_lifetime, True)
+    def finalize_setup(self, initial_setup: bool = False):
+        if initial_setup is True:
+            self.ping_target()  # TODO: This causes a race condition here. How to solve this,
+                             # TODO:  both for this line and for other drivers that may take a while to configure?
+
+    def create_register(self, register_definition: BacnetPointConfig) -> BACnetRegister:
+        if register_definition.write_priority < self.config.min_priority:
+            raise DriverConfigError(
+                f"{register_definition.volttron_point_name} configured with a priority"
+                f" {register_definition.write_priority} which is lower than than minimum {self.config.min_priority}.")
+
+        return BACnetRegister(register_definition.index,
+                              register_definition.bacnet_object_type,
+                              register_definition.property,
+                              register_definition.writable is True,
+                              register_definition.volttron_point_name,
+                              register_definition.units,
+                              description=register_definition.notes,
+                              priority=register_definition.write_priority,
+                              list_index=register_definition.array_index,
+                              is_cov=register_definition.cov_flag)
+
+    def insert_register(self, register: BACnetRegister, base_topic: str):
+        super(BACnet, self).insert_register(register, base_topic)
+        if register.is_cov:
+            self.establish_cov_subscription(register.point_name, self.config.cov_lifetime, True)
 
     def schedule_ping(self):
         if self.scheduled_ping is None:
             now = datetime.now()
-            next_try = now + self.ping_retry_interval
+            next_try = now + self.config.ping_retry_interval
             self.scheduled_ping = self.core.schedule(next_try, self.ping_target)
 
     def ping_target(self):
@@ -113,8 +171,8 @@ class BACnet(BaseInterface):
 
         pinged = False
         try:
-            self.vip.rpc.call(self.proxy_address, 'ping_device', self.target_address,
-                              self.device_id).get(timeout=self.timeout)
+            self.vip.rpc.call(self.config.proxy_vip_identity, 'ping_device', self.config.target_address,
+                              self.config.device_id).get(timeout=self.config.timeout)
             pinged = True
         except errors.Unreachable:
             _log.warning("Unable to reach BACnet proxy.")
@@ -128,69 +186,62 @@ class BACnet(BaseInterface):
         if not pinged:
             self.schedule_ping()
 
-    def get_point(self, point_name, get_priority_array=False):
-        register = self.get_register_by_name(point_name)
+    def get_point(self, topic, get_priority_array=False):
+        register: BACnetRegister = self.get_register_by_name(topic)
         property_name = "priorityArray" if get_priority_array else register.property
         register_index = None if get_priority_array else register.index
-        result = self.vip.rpc.call(self.proxy_address, 'read_property', self.target_address,
+        result = self.vip.rpc.call(self.config.proxy_vip_identity, 'read_property', self.config.target_address,
                                    register.object_type, register.instance_number, property_name,
-                                   register_index).get(timeout=self.timeout)
+                                   register_index).get(timeout=self.config.timeout)
         return result
 
-    def set_point(self, point_name, value, priority=None):
+    def set_point(self, topic, value, priority=None):
         # TODO: support writing from an array.
-        register = self.get_register_by_name(point_name)
+        register: BACnetRegister = self.get_register_by_name(topic)
         if register.read_only:
-            raise IOError("Trying to write to a point configured read only: " + point_name)
+            raise IOError("Trying to write to a point configured read only: " + topic)
 
-        if priority is not None and priority < self.min_priority:
+        if priority is not None and priority < self.config.min_priority:
             raise IOError("Trying to write with a priority lower than the minimum of " +
-                          str(self.min_priority))
+                          str(self.config.min_priority))
 
         # We've already validated the register priority against the min priority.
         args = [
-            self.target_address, value, register.object_type, register.instance_number,
+            self.config.target_address, value, register.object_type, register.instance_number,
             register.property, priority if priority is not None else register.priority,
             register.index
         ]
-        result = self.vip.rpc.call(self.proxy_address, 'write_property',
-                                   *args).get(timeout=self.timeout)
+        result = self.vip.rpc.call(self.config.proxy_vip_identity, 'write_property',
+                                   *args).get(timeout=self.config.timeout)
         return result
 
-    def scrape_all(self):
+    def get_multiple_points(self, topics: list[str], **kwargs) -> (dict, dict):
         # TODO: support reading from an array.
-        point_map = {}
-        read_registers = self.get_registers_by_type("byte", True)
-        write_registers = self.get_registers_by_type("byte", False)
-
-        for register in read_registers + write_registers:
-            point_map[register.point_name] = [
-                register.object_type, register.instance_number, register.property, register.index
-            ]
-
+        point_map = {t: [r.object_type, r.instance_number, r.property, r.index]
+                     for t, r in self.point_map.items() if t in topics}
         while True:
             try:
-                result = self.vip.rpc.call(self.proxy_address, 'read_properties',
-                                           self.target_address, point_map, self.max_per_request,
-                                           self.use_read_multiple).get(timeout=self.timeout)
+                result = self.vip.rpc.call(self.config.proxy_vip_identity, 'read_properties',
+                                           self.config.target_address, point_map, self.config.max_per_request,
+                                           self.config.use_read_multiple).get(timeout=self.config.timeout)
             except RemoteError as e:
                 if "segmentationNotSupported" in e.message:
-                    if self.max_per_request <= 1:
+                    if self.config.max_per_request <= 1:
                         _log.error(
                             "Receiving a segmentationNotSupported error with 'max_per_request' setting of 1."
                         )
                         raise
                     self.register_count_divisor += 1
-                    self.max_per_request = max(
+                    self.config.max_per_request = max(
                         int(self.register_count / self.register_count_divisor), 1)
                     _log.info("Device requires a lower max_per_request setting. Trying: " +
-                              str(self.max_per_request))
+                              str(self.config.max_per_request))
                     continue
-                elif e.message.endswith("rejected the request: 9") and self.use_read_multiple:
+                elif e.message.endswith("rejected the request: 9") and self.config.use_read_multiple:
                     _log.info(
                         "Device rejected request with 'unrecognized-service' error, attempting to access with use_read_multiple false"
                     )
-                    self.use_read_multiple = False
+                    self.config.use_read_multiple = False
                     continue
                 else:
                     raise
@@ -202,7 +253,7 @@ class BACnet(BaseInterface):
             else:
                 break
 
-        return result
+        return result, {}  # TODO: Need error dict, if possible.
 
     def revert_all(self, priority=None):
         """
@@ -213,72 +264,13 @@ class BACnet(BaseInterface):
         for register in write_registers:
             self.revert_point(register.point_name, priority=priority)
 
-    def revert_point(self, point_name, priority=None):
+    def revert_point(self, topic, priority=None):
         """
         Revert point to it's default state
         """
-        self.set_point(point_name, None, priority=priority)
+        self.set_point(topic, None, priority=priority)
 
-    def parse_config(self, configDict):
-        if configDict is None:
-            return
-
-        self.register_count = len(configDict)
-
-        for regDef in configDict:
-            # Skip lines that have no address yet.
-            if not regDef.get('Volttron Point Name'):
-                continue
-
-            io_type = regDef.get('BACnet Object Type')
-            read_only = regDef.get('Writable').lower() != 'true'
-            point_name = regDef.get('Volttron Point Name')
-
-            # checks if the point is flagged for change of value
-            is_cov = regDef.get("COV Flag", 'false').lower() == "true"
-
-            index = int(regDef.get('Index'))
-
-            list_index = regDef.get('Array Index', '')
-            list_index = list_index.strip()
-
-            if not list_index:
-                list_index = None
-            else:
-                list_index = int(list_index)
-
-            priority = regDef.get('Write Priority', '')
-            priority = priority.strip()
-            if not priority:
-                priority = None
-            else:
-                priority = int(priority)
-
-                if priority < self.min_priority:
-                    message = "{point} configured with a priority {priority} which is lower than than minimum {min}."
-                    raise DriverConfigError(
-                        message.format(point=point_name, priority=priority, min=self.min_priority))
-
-            description = regDef.get('Notes', '')
-            units = regDef.get('Units')
-            property_name = regDef.get('Property')
-
-            register = BACnetRegister(index,
-                                      io_type,
-                                      property_name,
-                                      read_only,
-                                      point_name,
-                                      units,
-                                      description=description,
-                                      priority=priority,
-                                      list_index=list_index)
-
-            self.insert_register(register)
-
-            if is_cov:
-                self.cov_points.append(point_name)
-
-    def establish_cov_subscription(self, point_name, lifetime, renew=False):
+    def establish_cov_subscription(self, topic, lifetime, renew=False):
         """
         Asks the BACnet proxy to establish a COV subscription for the point via RPC.
         If lifetime is specified, the subscription will live for that period, else the
@@ -286,13 +278,13 @@ class BACnet(BaseInterface):
         True, the the core scheduler will call this method again near the expiration
         of the subscription.
         """
-        register = self.get_register_by_name(point_name)
+        register: BACnetRegister = self.get_register_by_name(topic)
         try:
-            self.vip.rpc.call(self.proxy_address,
+            self.vip.rpc.call(self.config.proxy_vip_identity,
                               'create_cov_subscription',
-                              self.target_address,
-                              self.device_path,
-                              point_name,
+                              self.config.target_address,
+                              self.unique_remote_id('', self.config),
+                              topic,
                               register.object_type,
                               register.instance_number,
                               lifetime=lifetime)
@@ -303,5 +295,10 @@ class BACnet(BaseInterface):
         if renew and (lifetime > COV_UPDATE_BUFFER):
             now = datetime.now()
             next_sub_update = now + timedelta(seconds=(lifetime - COV_UPDATE_BUFFER))
-            self.core.schedule(next_sub_update, self.establish_cov_subscription, point_name,
+            self.core.schedule(next_sub_update, self.establish_cov_subscription, topic,
                                lifetime, renew)
+
+    @classmethod
+    def unique_remote_id(cls, config_name: str, config: BacnetRemoteConfig) -> tuple:
+        # TODO: This should probably incorporate information which currently belongs to the BACnet Proxy Agent.
+        return config.target_address, config.device_id

@@ -24,8 +24,9 @@
 
 import logging
 
+from collections.abc import KeysView
 from datetime import datetime, timedelta
-from pydantic import computed_field, Field
+from pydantic import computed_field, Field, field_validator
 
 from volttron.client.vip.agent import errors
 from volttron.driver.base.config import PointConfig, RemoteConfig
@@ -57,35 +58,42 @@ class BacnetPointConfig(PointConfig):
     cov_flag: bool = Field(default=False, alias='COV Flag')
     write_priority: int | None = Field(default=16, ge=1, le=16, alias='Write Priority')
 
+    @field_validator('write_priority', mode='before')
+    @classmethod
+    def _normalize_write_priority(cls, v):
+        return 16 if v == '' else float(v)
+
 
 class BacnetRemoteConfig(RemoteConfig):
-    min_priority: int = Field(default=8, ge=1, le=16)
-    target_address: str = Field(alias="device_address")
+    cov_lifetime_configured: float = Field(default=180.0, alias='cov_lifetime')
     device_id: int = Field(ge=0)
-    configured_cov_lifetime: float = Field(default=180.0, alias='cov_lifetime')
-    proxy_vip_identity: str = Field(alias="proxy_address", default="platform.bacnet_proxy")
     max_per_request: int = Field(ge=0, default=24)
-    use_read_multiple: bool = True
+    min_priority: int = Field(default=8, ge=1, le=16)
+    ping_retry_interval_configured: float = Field(alias='ping_retry_interval', default=5.0)
+    proxy_vip_identity: str = Field(alias="proxy_address", default="platform.bacnet_proxy")
+    target_address: str = Field(alias="device_address")
     timeout: float = Field(ge=0, default=30.0)
-    configured_ping_retry_interval: float = Field(alias='ping_retry_interval', default=5.0)
+    use_read_multiple: bool = True
 
     @computed_field
     @property
     def ping_retry_interval(self) -> timedelta:
-        return timedelta(seconds=self.configured_ping_retry_interval)
+        return timedelta(seconds=self.ping_retry_interval_configured)
 
     @ping_retry_interval.setter
     def ping_retry_interval(self, v):
-        self.configured_ping_retry_interval = v
+        if isinstance(v, timedelta):
+            self.ping_retry_interval_configured = v.total_seconds()
 
     @computed_field
     @property
     def cov_lifetime(self) -> timedelta:
-        return timedelta(seconds=self.configured_cov_lifetime)
+        return timedelta(seconds=self.cov_lifetime_configured)
 
     @cov_lifetime.setter
     def cov_lifetime(self, v):
-            self.configured_cov_lifetime = v
+        if isinstance(v, timedelta):
+            self.cov_lifetime_configured = v.total_seconds()
 
 
 class BACnetRegister(BaseRegister):

@@ -136,9 +136,11 @@ class BACnet(BaseInterface):
 
     @property
     def register_count(self):
-        return len(self.registers)
+        return sum([len(reg_group) for reg_group in self.registers.values()])
 
     def finalize_setup(self, initial_setup: bool = False):
+        # TODO: This will be called after every device is added.  If this is an issue, we would need a different hook.
+        #  It could be called on every remote after the end of a setup loop, possibly?
         if initial_setup is True:
             self.ping_target()
 
@@ -220,10 +222,13 @@ class BACnet(BaseInterface):
                                    *args).get(timeout=self.config.timeout)
         return result
 
-    def get_multiple_points(self, topics: list[str], **kwargs) -> (dict, dict):
+    @staticmethod
+    def _query_fields(reg: BacnetPointConfig):
+        return [reg.object_type, reg.instance_number, reg.property, reg.index]
+
+    def get_multiple_points(self, topics: KeysView[str], **kwargs) -> (dict, dict):
         # TODO: support reading from an array.
-        point_map = {t: [r.object_type, r.instance_number, r.property, r.index]
-                     for t, r in self.point_map.items() if t in topics}
+        point_map = {t: self._query_fields(self.point_map[t]) for t in topics if t in self.point_map}
         while True:
             try:
                 result = self.vip.rpc.call(self.config.proxy_vip_identity, 'read_properties',
@@ -238,7 +243,7 @@ class BACnet(BaseInterface):
                         raise
                     self.register_count_divisor += 1
                     self.config.max_per_request = max(
-                        int(self.register_count / self.register_count_divisor), 1)
+                        int(self.register_count / self.register_count_divisor)+1, 1)
                     _log.info("Device requires a lower max_per_request setting. Trying: " +
                               str(self.config.max_per_request))
                     continue

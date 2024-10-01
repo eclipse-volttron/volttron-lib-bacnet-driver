@@ -128,8 +128,8 @@ class BACnet(BaseInterface):
     REGISTER_CONFIG_CLASS = BacnetPointConfig
     INTERFACE_CONFIG_CLASS = BacnetRemoteConfig
 
-    def __init__(self, config, **kwargs):
-        super(BACnet, self).__init__(config, **kwargs)
+    def __init__(self, config, *args, **kwargs):
+        super(BACnet, self).__init__(config, *args, **kwargs)
         self.register_count_divisor = 1
 
         self.scheduled_ping = None

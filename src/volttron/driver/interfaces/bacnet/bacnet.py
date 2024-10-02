@@ -153,7 +153,7 @@ class BACnet(BaseInterface):
         return BACnetRegister(register_definition.index,
                               register_definition.bacnet_object_type,
                               register_definition.property,
-                              register_definition.writable is True,
+                              register_definition.writable is False,
                               register_definition.volttron_point_name,
                               register_definition.units,
                               description=register_definition.notes,

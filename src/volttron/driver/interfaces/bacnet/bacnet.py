@@ -193,16 +193,25 @@ class BACnet(BaseInterface):
         if not pinged:
             self.schedule_ping()
 
-    def get_point(self, topic, get_priority_array=False):
+    def get_point(self, topic: str, on_property: str = None):
         register: BACnetRegister = self.get_register_by_name(topic)
-        property_name = "priorityArray" if get_priority_array else register.property
-        register_index = None if get_priority_array else register.index
-        result = self.vip.rpc.call(self.config.proxy_vip_identity, 'read_property', self.config.target_address,
-                                   register.object_type, register.instance_number, property_name,
-                                   register_index).get(timeout=self.config.timeout)
+        if on_property is None:
+            result = self.vip.rpc.call(self.config.proxy_vip_identity, 'read_property', self.config.target_address,
+                                       register.object_type, register.instance_number, register.property,
+                                       register.index).get(timeout=self.config.timeout)
+        else:
+            point_map = {}
+            point_map[register.point_name] = [register.object_type,
+                                              register.instance_number,
+                                              on_property,
+                                              register.index]
+            result = self.vip.rpc.call(self.config.proxy_vip_identity, 'read_properties',
+                                       self.config.target_address, point_map,
+                                       self.config.max_per_request, True).get(timeout=self.config.timeout)
+            result = list(result.values())[0]
         return result
 
-    def set_point(self, topic, value, priority=None):
+    def set_point(self, topic, value, priority=None, on_property=None):
         # TODO: support writing from an array.
         register: BACnetRegister = self.get_register_by_name(topic)
         if register.read_only:
@@ -215,7 +224,8 @@ class BACnet(BaseInterface):
         # We've already validated the register priority against the min priority.
         args = [
             self.config.target_address, value, register.object_type, register.instance_number,
-            register.property, priority if priority is not None else register.priority,
+            on_property if on_property is not None else register.property,
+            priority if priority is not None else register.priority,
             register.index
         ]
         result = self.vip.rpc.call(self.config.proxy_vip_identity, 'write_property',

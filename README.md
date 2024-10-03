@@ -9,10 +9,10 @@
 # Requires
 
 * python >= 3.10
-* bacpypes == "0.16.7"
-* volttron >= 10.0
-* volttron-lib-base-driver
-* volttron-bacnet-proxy
+* bacpypes == 0.16.7
+* volttron-core >= 2.0.0rc0
+* volttron-lib-base-driver >= 2.0.0rc0
+* volttron-bacnet-proxy >= 2.0.0rc0
 
 # Documentation
 More detailed documentation can be found on [ReadTheDocs](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-platform-driver/docs/source/index.html). The RST source
@@ -28,13 +28,13 @@ Information on how to install of the VOLTTRON platform can be found
 1. If it is not already, install the VOLTTRON Platform Driver Agent:
 
     ```shell
-    vctl install volttron-platform-driver --vip-identity platform.driver --start
+    vctl install volttron-platform-driver --vip-identity platform.driver
     ```
 
 2. Install the BACnetProxy Agent:
 
     ```shell
-    vctl install volttron-bacnet-proxy --agent-config <path to bacnet proxy agent configuration file> --vip-identity platform.bacnet_proxy --start
+    vctl install volttron-bacnet-proxy --agent-config <path to bacnet proxy agent configuration file> --vip-identity platform.bacnet_proxy
     ```
 
 3. Install the VOLTTRON BACnet Driver Library:
@@ -52,7 +52,7 @@ Information on how to install of the VOLTTRON platform can be found
         cd config
         ```
 
-    * Create a file called `bacnet.config`; it should contain a JSON object that specifies the configuration of your BACnet driver. An example of such a file is provided at the root of this project; the example file is named 'bacnet.config'. The following JSON is an example of a `bacnet.config`:
+    * Create a file called `device_name.config`; it should contain a JSON object that specifies the configuration of your BACnet driver. An example of such a file is provided at the root of this project; the example file is named 'bacnet.config'. The following JSON is an example of a `bacnet.config`:
     
          ```json
          {
@@ -65,9 +65,7 @@ Information on how to install of the VOLTTRON platform can be found
          }
          ```
 
-         ℹ️ **TIP:** In the `driver_config`, `device_address` is the address bound to the network port over which BACnet communication will happen on the computer running VOLTTRON. This is NOT the address of any target device. See [BACnet Router Addressing](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-bacnet-proxy/docs/source/bacnet-router-addressing.html).
-
-    * Create another file called `bacnet.csv`; it should contain all the points on the device that you want published to Volttron. An example of such a CSV file is provided at the root of this project; the example CSV file is named 'bacnet.csv'. The following CSV file is an example:
+    * Create another file called `device_name.csv`; it should contain all the points on the device that you want published to Volttron. An example of such a CSV file is provided at the root of this project; the example CSV file is named 'bacnet.csv'. The following CSV file is an example:
 
         ```csv
         Point Name,Volttron Point Name,Units,Unit Details,BACnet Object Type,Property,Writable,Index,Notes

@@ -24,7 +24,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-volttron-lib-base-driver = { path = "../volttron-lib-base-driver", develop = true }
+volttron-lib-base-driver = ">=2.0.0rc0"
 bacpypes = "0.16.7"
 
 [tool.poetry.group.dev.dependencies]

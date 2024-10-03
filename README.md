@@ -15,7 +15,7 @@
 * volttron-bacnet-proxy >= 2.0.0rc0
 
 # Documentation
-More detailed documentation can be found on [ReadTheDocs](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-platform-driver/docs/source/index.html). The RST source
+More detailed documentation can be found on [ReadTheDocs](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-lib-bacnet-driver/index.html#bacnet-driver). The RST source
 of the documentation for this component is located in the "docs" directory of this repository.
 
 

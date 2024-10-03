@@ -40,7 +40,7 @@ Information on how to install of the VOLTTRON platform can be found
 3. Install the VOLTTRON BACnet Driver Library:
 
     ```shell
-    pip install volttron-lib-bacnet-driver
+    poetry add volttron-lib-bacnet-driver
     ```
 
 4. Store device and registry files for the BACnet device to the Platform Driver configuration store:

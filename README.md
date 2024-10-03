@@ -15,7 +15,7 @@
 * volttron-bacnet-proxy >= 2.0.0rc0
 
 # Documentation
-More detailed documentation can be found on [ReadTheDocs](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-platform-driver/docs/source/index.html). The RST source
+More detailed documentation can be found on [ReadTheDocs](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-lib-bacnet-driver/index.html#bacnet-driver). The RST source
 of the documentation for this component is located in the "docs" directory of this repository.
 
 
@@ -31,7 +31,7 @@ Information on how to install of the VOLTTRON platform can be found
     vctl install volttron-platform-driver --vip-identity platform.driver
     ```
 
-2. Install the BACnetProxy Agent:
+2. Install the BACnetProxy Agent. An example configuration can be found [here](https://github.com/eclipse-volttron/volttron-bacnet-proxy/blob/main/config)
 
     ```shell
     vctl install volttron-bacnet-proxy --agent-config <path to bacnet proxy agent configuration file> --vip-identity platform.bacnet_proxy
@@ -81,7 +81,7 @@ Information on how to install of the VOLTTRON platform can be found
 
 5. Observe Data
 
-    To see data being published to the bus, install a [Listener Agent](https://pypi.org/project/volttron-listener/):
+    To see data being published to the bus, install a [Listener Agent](https://github.com/eclipse-volttron/volttron-listener):
 
     ```
     vctl install volttron-listener --start

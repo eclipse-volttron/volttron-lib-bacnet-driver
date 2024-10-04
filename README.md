@@ -14,7 +14,6 @@ Information on how to install of the VOLTTRON platform can be found
 ## Automatically installed dependencies
 
 * volttron-lib-base-driver >= 2.0.0rc0
-* volttron-bacnet-proxy >= 2.0.0rc0
 
 # Documentation
 More detailed documentation can be found on [ReadTheDocs](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-lib-bacnet-driver/index.html#bacnet-driver). The RST source

@@ -5,11 +5,14 @@
 [![Passing?](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run-tests.yml/badge.svg)](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run-tests.yml)
 [![pypi version](https://img.shields.io/pypi/v/volttron-lib-bacnet-driver.svg)](https://pypi.org/project/volttron-lib-bacnet-driver/)
 
-# Dependencies
+## Pre-requisite
 
-* python >= 3.10
-* bacpypes == 0.16.7
-* volttron-core >= 2.0.0rc0
+VOLTTRON (>=11.0.0rc0) should be installed and running.  Its virtual environment should be active.
+Information on how to install of the VOLTTRON platform can be found
+[here](https://github.com/eclipse-volttron/volttron-core/tree/v10)
+
+## Automatically installed dependencies
+
 * volttron-lib-base-driver >= 2.0.0rc0
 * volttron-bacnet-proxy >= 2.0.0rc0
 
@@ -20,9 +23,6 @@ of the documentation for this component is located in the "docs" directory of th
 
 # Installation
 
-Before installing, VOLTTRON should be installed and running.  Its virtual environment should be active.
-Information on how to install of the VOLTTRON platform can be found
-[here](https://github.com/eclipse-volttron/volttron-core).
 
 1. If it is not already, install the VOLTTRON Platform Driver Agent:
 

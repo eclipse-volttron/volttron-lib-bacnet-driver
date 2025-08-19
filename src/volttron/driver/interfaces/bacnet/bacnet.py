@@ -22,11 +22,22 @@
 # ===----------------------------------------------------------------------===
 # }}}
 
+import json
 import logging
 
+from bacpypes3.primitivedata import ObjectIdentifier
 from collections.abc import KeysView
 from datetime import datetime, timedelta
-from pydantic import computed_field, Field, field_validator
+from gevent import Timeout
+from pydantic import computed_field, Field, field_validator, IPvAnyAddress
+
+# TODO: Make sure these imports work and get rid of noinspection.
+# noinspection PyUnresolvedReferences
+from protocol_proxy.ipc import ProtocolProxyMessage, ProtocolProxyPeer
+# noinspection PyUnresolvedReferences
+from protocol_proxy.manager.gevent import GeventProtocolProxyManager
+# noinspection PyUnresolvedReferences
+from protocol_proxy.protocol.bacnet import BACnetProxy
 
 from volttron.client.vip.agent import errors
 from volttron.driver.base.config import PointConfig, RemoteConfig
@@ -65,8 +76,10 @@ class BacnetPointConfig(PointConfig):
 
 
 class BacnetRemoteConfig(RemoteConfig):
+    bacnet_network: int = Field(default=0)
     cov_lifetime_configured: float = Field(default=180.0, alias='cov_lifetime')
     device_id: int = Field(ge=0)
+    local_device_address: IPvAnyAddress = Field(default='0.0.0.0')  # TODO: Should this be IpvAnyInterface? (i.e., should it allow CIDR specification?)
     max_per_request: int = Field(ge=0, default=24)
     min_priority: int = Field(default=8, ge=1, le=16)
     ping_retry_interval_configured: float = Field(alias='ping_retry_interval', default=5.0)
@@ -107,7 +120,7 @@ class BACnetRegister(BaseRegister):
                  units,
                  description='',
                  priority=None,
-                 list_index=None,
+                 list_index=None,  # TODO: Should this be renamed "array_index"?
                  is_cov=False):
         super(BACnetRegister, self).__init__("byte",
                                              read_only,
@@ -118,7 +131,7 @@ class BACnetRegister(BaseRegister):
         self.object_type = object_type
         self.property = property_name
         self.priority = priority
-        self.index = list_index
+        self.array_index = list_index
         self.python_type = BACNET_TYPE_MAPPING[object_type]
         self.is_cov = is_cov
 
@@ -132,7 +145,13 @@ class BACnet(BaseInterface):
         super(BACnet, self).__init__(config, *args, **kwargs)
         self.register_count_divisor = 1
 
+        self.ppm: GeventProtocolProxyManager = GeventProtocolProxyManager.get_manager(BACnetProxy)
+        self.proxy_peer: ProtocolProxyPeer = None
         self.scheduled_ping = None
+
+        self.ppm.start()  # TODO: Does this and/or select_loop spawn need to be in finalize_setup? (If not, keep here.)
+        self.core.spawn(self.ppm.select_loop)
+        _log.debug('AFTER BACNET INTERFACE INIT')
 
     @property
     def register_count(self):
@@ -141,8 +160,14 @@ class BACnet(BaseInterface):
     def finalize_setup(self, initial_setup: bool = False):
         # TODO: This will be called after every device is added.  If this is an issue, we would need a different hook.
         #  It could be called on every remote after the end of a setup loop, possibly?
+        _log.debug('BACnet finalize_setup called.')
+        self.proxy_peer = self.ppm.get_proxy((self.config.local_device_address, self.config.bacnet_network),
+                                             local_device_address=self.config.local_device_address)
+        _log.debug('BACnet finalize_setup: proxy_peer is: %s', self.proxy_peer)
         if initial_setup is True:
-            self.ping_target()
+            self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.ping_target())
+        # TODO: Consider adding a self.config.remote_refresh_interval to be scheduled as
+        #  a periodic here to ping the target with a WhoIs.
 
     def create_register(self, register_definition: BacnetPointConfig) -> BACnetRegister:
         if register_definition.write_priority < self.config.min_priority:
@@ -172,6 +197,7 @@ class BACnet(BaseInterface):
             next_try = now + self.config.ping_retry_interval
             self.scheduled_ping = self.core.schedule(next_try, self.ping_target)
 
+    # TODO: Can the ping handling be improved to better keep remotes alive?
     def ping_target(self):
         # Some devices (mostly RemoteStation addresses behind routers) will not be reachable without
         # first establishing the route to the device. Sending a directed WhoIsRequest is will
@@ -179,12 +205,20 @@ class BACnet(BaseInterface):
 
         pinged = False
         try:
-            self.vip.rpc.call(self.config.proxy_vip_identity, 'ping_device', self.config.target_address,
-                              self.config.device_id).get(timeout=self.config.timeout)
+            self.ppm.send(self.proxy_peer,
+                         ProtocolProxyMessage(
+                             method_name='WHO_IS',
+                             payload=json.dumps({
+                                 'low_limit': self.config.device_id,
+                                 'high_limit': self.config.device_id,
+                                 'address': self.config.target_address
+                                                }).encode('utf8'),
+                            response_expected=False
+                         ))
             pinged = True
+        # TODO: What exceptions might we really encounter, now, through PPM?
         except errors.Unreachable:
             _log.warning("Unable to reach BACnet proxy.")
-
         except errors.VIPError:
             _log.warning("Error trying to ping device.")
 
@@ -195,21 +229,17 @@ class BACnet(BaseInterface):
 
     def get_point(self, topic: str, on_property: str = None):
         register: BACnetRegister = self.get_register_by_name(topic)
-        if on_property is None:
-            result = self.vip.rpc.call(self.config.proxy_vip_identity, 'read_property', self.config.target_address,
-                                       register.object_type, register.instance_number, register.property,
-                                       register.index).get(timeout=self.config.timeout)
-        else:
-            point_map = {}
-            point_map[register.point_name] = [register.object_type,
-                                              register.instance_number,
-                                              on_property,
-                                              register.index]
-            result = self.vip.rpc.call(self.config.proxy_vip_identity, 'read_properties',
-                                       self.config.target_address, point_map,
-                                       self.config.max_per_request, True).get(timeout=self.config.timeout)
-            result = list(result.values())[0]
-        return result
+        return self.ppm.send(self.proxy_peer,
+                             ProtocolProxyMessage(
+                                 method_name='READ_PROPERTY',
+                                 payload=json.dumps({
+                                     'device_address': self.config.target_address,
+                                     'object_identifier': str((register.object_type, register.instance_number)),
+                                     'property_identifier': on_property if on_property else register.property,
+                                     'property_array_index': register.array_index
+                                 }).encode('utf8'),
+                                 response_expected=True
+                             ))
 
     def set_point(self, topic, value, priority=None, on_property=None):
         # TODO: support writing from an array.
@@ -221,29 +251,48 @@ class BACnet(BaseInterface):
             raise IOError("Trying to write with a priority lower than the minimum of " +
                           str(self.config.min_priority))
 
-        # We've already validated the register priority against the min priority.
-        args = [
-            self.config.target_address, value, register.object_type, register.instance_number,
-            on_property if on_property is not None else register.property,
-            priority if priority is not None else register.priority,
-            register.index
-        ]
-        result = self.vip.rpc.call(self.config.proxy_vip_identity, 'write_property',
-                                   *args).get(timeout=self.config.timeout)
-        return result
+        return self.ppm.send(self.proxy_peer,
+                             ProtocolProxyMessage(
+                                 method_name='WRITE_PROPERTY',
+                                 payload=json.dumps({
+                                     'device_address': self.config.target_address,
+                                     'object_identifier': str((register.object_type, register.instance_number)),
+                                     'property_identifier': on_property if on_property else register.property,
+                                     'value': value,
+                                     'priority': priority if priority is not None else register.priority,
+                                     'property_array_index': register.array_index
+                                 }).encode('utf8'),
+                                 response_expected=True
+                             ))
 
     @staticmethod
     def _query_fields(reg: BacnetPointConfig):
-        return [reg.object_type, reg.instance_number, reg.property, reg.index]
+        return [f'{reg.object_type}, {reg.instance_number}', reg.property, reg.array_index]
 
     def get_multiple_points(self, topics: KeysView[str], **kwargs) -> (dict, dict):
         # TODO: support reading from an array.
+        # TODO: Manner of packing and unpacking this request needs to be rethought.
         point_map = {t: self._query_fields(self.point_map[t]) for t in topics if t in self.point_map}
         while True:
             try:
-                result = self.vip.rpc.call(self.config.proxy_vip_identity, 'read_properties',
-                                           self.config.target_address, point_map, self.config.max_per_request,
-                                           self.config.use_read_multiple).get(timeout=self.config.timeout)
+                # TODO:
+                #  Need to honor self.config.max_per_request, and probably detect it.
+                #  Need to loop if not self.config.use_read_multiple --- Probably want to use batchread!
+                #  Shouldn't send topics to the proxy, just the value in the current point map.
+                #  Then we need to map it back to topics once a return is had.
+                result = self.ppm.send(self.proxy_peer,
+                                     ProtocolProxyMessage(
+                                         method_name='READ_PROPERTY_MULTIPLE',
+                                         payload=json.dumps({
+                                             'device_address': self.config.target_address,
+                                             'read_specifications': point_map
+                                         }).encode('utf8'),
+                                         response_expected=True
+                                     )).get(timeout=self.config.timeout).decode('utf8')
+                _log.debug(f"RESULT IS: {result}")  # TODO: This is currently a string, but needs to be a dict.
+            # TODO: The error handling still reflects the BACnetProxyAgent. How do we do this correctly?
+            except Timeout as e:
+                _log.warning(f'Request timed out polling: {self.config.target_address}')
             except RemoteError as e:
                 if "segmentationNotSupported" in e.message:
                     if self.config.max_per_request <= 1:
@@ -275,6 +324,10 @@ class BACnet(BaseInterface):
 
         return result, {}  # TODO: Need error dict, if possible.
 
+    def set_multiple_points(self, topics_values, **kwargs):
+        # TODO: Implement SET_PROPERTY_MULTIPLE in BACnetProtocolProxy
+        super(BACnet, self).set_multiple_points(topics_values, **kwargs)
+
     def revert_all(self, priority=None):
         """
         Revert entrire device to it's default state
@@ -288,6 +341,7 @@ class BACnet(BaseInterface):
         """
         Revert point to it's default state
         """
+        # TODO: Should this have a way to set the revert value to something other than None (e.g., for UCSD's lights)?
         self.set_point(topic, None, priority=priority)
 
     def establish_cov_subscription(self, topic, lifetime, renew=False):
@@ -298,25 +352,27 @@ class BACnet(BaseInterface):
         True, the the core scheduler will call this method again near the expiration
         of the subscription.
         """
-        register: BACnetRegister = self.get_register_by_name(topic)
-        try:
-            self.vip.rpc.call(self.config.proxy_vip_identity,
-                              'create_cov_subscription',
-                              self.config.target_address,
-                              self.unique_remote_id('', self.config),
-                              topic,
-                              register.object_type,
-                              register.instance_number,
-                              lifetime=lifetime)
-        except errors.Unreachable:
-            _log.warning(
-                "Unable to establish a subscription via the bacnet proxy as it was unreachable.")
-        # Schedule COV resubscribe
-        if renew and (lifetime > COV_UPDATE_BUFFER):
-            now = datetime.now()
-            next_sub_update = now + timedelta(seconds=(lifetime - COV_UPDATE_BUFFER))
-            self.core.schedule(next_sub_update, self.establish_cov_subscription, topic,
-                               lifetime, renew)
+        # TODO: Implement COV in the BACnetProtocolProxy
+        # register: BACnetRegister = self.get_register_by_name(topic)
+        # try:
+        #     self.vip.rpc.call(self.config.proxy_vip_identity,
+        #                       'create_cov_subscription',
+        #                       self.config.target_address,
+        #                       self.unique_remote_id('', self.config),
+        #                       topic,
+        #                       register.object_type,
+        #                       register.instance_number,
+        #                       lifetime=lifetime)
+        # except errors.Unreachable:
+        #     _log.warning(
+        #         "Unable to establish a subscription via the bacnet proxy as it was unreachable.")
+        # # Schedule COV resubscribe
+        # if renew and (lifetime > COV_UPDATE_BUFFER):
+        #     now = datetime.now()
+        #     next_sub_update = now + timedelta(seconds=(lifetime - COV_UPDATE_BUFFER))
+        #     self.core.schedule(next_sub_update, self.establish_cov_subscription, topic,
+        #                        lifetime, renew)
+        pass
 
     @classmethod
     def unique_remote_id(cls, config_name: str, config: BacnetRemoteConfig) -> tuple:

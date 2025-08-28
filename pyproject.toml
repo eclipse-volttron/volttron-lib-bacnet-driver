@@ -25,7 +25,8 @@ classifiers = [
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
 volttron-lib-base-driver = ">=2.0.0rc0"
-bacpypes = "0.16.7"
+bacpypes3 = "0.0.102"
+protocol-proxy-bacnet = "2.0.0rc0"
 
 [tool.poetry.group.dev.dependencies]
 volttron-testing = "^0.4.0rc0"

@@ -36,8 +36,6 @@ from pydantic import computed_field, Field, field_validator, IPvAnyAddress
 from protocol_proxy.ipc import ProtocolProxyMessage, ProtocolProxyPeer
 # noinspection PyUnresolvedReferences
 from protocol_proxy.manager.gevent import GeventProtocolProxyManager
-# noinspection PyUnresolvedReferences
-from protocol_proxy.protocol.bacnet import BACnetProxy
 
 from volttron.client.vip.agent import errors
 from volttron.driver.base.config import PointConfig, RemoteConfig
@@ -145,7 +143,7 @@ class BACnet(BaseInterface):
         super(BACnet, self).__init__(config, *args, **kwargs)
         self.register_count_divisor = 1
 
-        self.ppm: GeventProtocolProxyManager = GeventProtocolProxyManager.get_manager(BACnetProxy)
+        self.ppm: GeventProtocolProxyManager = GeventProtocolProxyManager.get_manager('bacnet')  # '(BACnetProxy)
         self.proxy_peer: ProtocolProxyPeer = None
         self.scheduled_ping = None
 
@@ -267,7 +265,8 @@ class BACnet(BaseInterface):
 
     @staticmethod
     def _query_fields(reg: BacnetPointConfig):
-        return [f'{reg.object_type}, {reg.instance_number}', reg.property, reg.array_index]
+        return {'object_id': f'{reg.object_type}, {reg.instance_number}',
+                'property': reg.property, 'array_index': reg.array_index}
 
     def get_multiple_points(self, topics: KeysView[str], **kwargs) -> (dict, dict):
         # TODO: support reading from an array.
@@ -278,18 +277,19 @@ class BACnet(BaseInterface):
                 # TODO:
                 #  Need to honor self.config.max_per_request, and probably detect it.
                 #  Need to loop if not self.config.use_read_multiple --- Probably want to use batchread!
-                #  Shouldn't send topics to the proxy, just the value in the current point map.
-                #  Then we need to map it back to topics once a return is had.
-                result = self.ppm.send(self.proxy_peer,
+                response = self.ppm.send(self.proxy_peer,
                                      ProtocolProxyMessage(
-                                         method_name='READ_PROPERTY_MULTIPLE',
+                                         method_name='BATCH_READ',
                                          payload=json.dumps({
                                              'device_address': self.config.target_address,
                                              'read_specifications': point_map
                                          }).encode('utf8'),
                                          response_expected=True
                                      )).get(timeout=self.config.timeout).decode('utf8')
-                _log.debug(f"RESULT IS: {result}")  # TODO: This is currently a string, but needs to be a dict.
+                _log.debug(f"RESPONSE IS: {response}")
+                response = json.loads(response)
+                result_dict = response.get('result', {})
+                error_dict = response.get('error', {})
             # TODO: The error handling still reflects the BACnetProxyAgent. How do we do this correctly?
             except Timeout as e:
                 _log.warning(f'Request timed out polling: {self.config.target_address}')
@@ -319,10 +319,10 @@ class BACnet(BaseInterface):
                 _log.warning("Unable to reach BACnet proxy.")
                 self.schedule_ping()
                 raise
-            else:
-                break
-
-        return result, {}  # TODO: Need error dict, if possible.
+            _log.debug(f'RECEIVED ERROR: {error_dict}')
+            _log.debug(f'RECEIVED RESULT: {result_dict}')
+            return result_dict, error_dict
+        # return ret_dict, {}  # TODO: Need error dict, if possible.
 
     def set_multiple_points(self, topics_values, **kwargs):
         # TODO: Implement SET_PROPERTY_MULTIPLE in BACnetProtocolProxy

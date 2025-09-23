@@ -46,7 +46,7 @@ from volttron.utils.jsonrpc import RemoteError
 _log = logging.getLogger(__name__)
 
 COV_UPDATE_BUFFER = 3
-BACNET_TYPE_MAPPING = {
+BACNET_TYPE_MAPPING = {  # TODO: Update with additional types.
     "multiStateValue": int,
     "multiStateInput": int,
     "multiStateOutput": int,

@@ -7,7 +7,7 @@ import gevent
 import pytest
 from mock import MagicMock    # type: ignore
 from volttron.client.known_identities import CONFIGURATION_STORE, PLATFORM_DRIVER
-from volttron.utils import setup_logging
+from volttron.client.logs import setup_logging
 from volttrontesting.platformwrapper import PlatformWrapper
 
 setup_logging()
@@ -105,7 +105,7 @@ def config_store_connection(volttron_instance: PlatformWrapper):
 
 @pytest.fixture(scope="module")
 def config_store(config_store_connection):
-    # this fixture will setup a the BACnet driver that will communicate with a live BACnet device located at PNNL campus in Richland at the given device_address
+    # this fixture will set up a BACnet driver that will communicate with a live BACnet device located at PNNL campus in Richland at the given device_address
     device_address = os.environ.get(BACNET_TEST_IP)
     if os.system("ping -c 1 " + device_address) != 0:
         pytest.skip(f"BACnet device cannot be reached at {device_address} ")

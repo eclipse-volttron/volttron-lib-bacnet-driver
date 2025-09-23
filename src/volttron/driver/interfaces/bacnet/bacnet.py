@@ -33,7 +33,7 @@ from pydantic import computed_field, Field, field_validator, IPvAnyAddress
 
 # TODO: Make sure these imports work and get rid of noinspection.
 # noinspection PyUnresolvedReferences
-from protocol_proxy.ipc import ProtocolProxyMessage, ProtocolProxyPeer
+from protocol_proxy.ipc import ProtocolProxyMessage, ProtocolProxyPeer, callback
 # noinspection PyUnresolvedReferences
 from protocol_proxy.manager.gevent import GeventProtocolProxyManager
 
@@ -62,7 +62,7 @@ BACNET_TYPE_MAPPING = {  # TODO: Update with additional types.
 class BacnetPointConfig(PointConfig):
     array_index: int | None = None # TODO: Is this the correct default for this? What is it?
     bacnet_object_type: str = Field(alias='BACnet Object Type')
-    property: str = Field(alias='Property')  # TODO: Should be an Enum of BACnet property types.
+    property: str = Field(alias='Property', default='present-value')  # TODO: Should be an Enum of BACnet property types.
     index: int = Field(alias='Index')
     cov_flag: bool = Field(default=False, alias='COV Flag')
     write_priority: int | None = Field(default=16, ge=1, le=16, alias='Write Priority')
@@ -147,8 +147,9 @@ class BACnet(BaseInterface):
         self.proxy_peer: ProtocolProxyPeer = None
         self.scheduled_ping = None
 
+        self.ppm.register_callback(self.receive_cov, 'RECEIVE_COV', provides_response=False)
         self.ppm.start()  # TODO: Does this and/or select_loop spawn need to be in finalize_setup? (If not, keep here.)
-        self.core.spawn(self.ppm.select_loop)
+        self.driver_agent.core.spawn(self.ppm.select_loop)
         _log.debug('AFTER BACNET INTERFACE INIT')
 
     @property
@@ -166,6 +167,9 @@ class BACnet(BaseInterface):
             self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.ping_target())
         # TODO: Consider adding a self.config.remote_refresh_interval to be scheduled as
         #  a periodic here to ping the target with a WhoIs.
+        for topic, register in self.point_map.items():
+            if register.is_cov:
+                self.establish_cov_subscription(register, topic, self.config.cov_lifetime)
 
     def create_register(self, register_definition: BacnetPointConfig) -> BACnetRegister:
         if register_definition.write_priority < self.config.min_priority:
@@ -184,16 +188,11 @@ class BACnet(BaseInterface):
                               list_index=register_definition.array_index,
                               is_cov=register_definition.cov_flag)
 
-    def insert_register(self, register: BACnetRegister, base_topic: str):
-        super(BACnet, self).insert_register(register, base_topic)
-        if register.is_cov:
-            self.establish_cov_subscription(register.point_name, self.config.cov_lifetime, True)
-
     def schedule_ping(self):
         if self.scheduled_ping is None:
             now = datetime.now()
             next_try = now + self.config.ping_retry_interval
-            self.scheduled_ping = self.core.schedule(next_try, self.ping_target)
+            self.scheduled_ping = self.driver_agent.core.schedule(next_try, self.ping_target)
 
     # TODO: Can the ping handling be improved to better keep remotes alive?
     def ping_target(self):
@@ -344,35 +343,34 @@ class BACnet(BaseInterface):
         # TODO: Should this have a way to set the revert value to something other than None (e.g., for UCSD's lights)?
         self.set_point(topic, None, priority=priority)
 
-    def establish_cov_subscription(self, topic, lifetime, renew=False):
+    def establish_cov_subscription(self, register, topic, lifetime):
         """
-        Asks the BACnet proxy to establish a COV subscription for the point via RPC.
-        If lifetime is specified, the subscription will live for that period, else the
-        subscription will last indefinitely. Default period of 3 minutes. If renew is
-        True, the the core scheduler will call this method again near the expiration
-        of the subscription.
+        Asks the BACnet Proxy to establish a COV subscription for the point via RPC.
+        If lifetime is specified, the subscription will be renewed by the proxy on
+         that interval, else the subscription will last indefinitely.
         """
-        # TODO: Implement COV in the BACnetProtocolProxy
-        # register: BACnetRegister = self.get_register_by_name(topic)
-        # try:
-        #     self.vip.rpc.call(self.config.proxy_vip_identity,
-        #                       'create_cov_subscription',
-        #                       self.config.target_address,
-        #                       self.unique_remote_id('', self.config),
-        #                       topic,
-        #                       register.object_type,
-        #                       register.instance_number,
-        #                       lifetime=lifetime)
-        # except errors.Unreachable:
-        #     _log.warning(
-        #         "Unable to establish a subscription via the bacnet proxy as it was unreachable.")
-        # # Schedule COV resubscribe
-        # if renew and (lifetime > COV_UPDATE_BUFFER):
-        #     now = datetime.now()
-        #     next_sub_update = now + timedelta(seconds=(lifetime - COV_UPDATE_BUFFER))
-        #     self.core.schedule(next_sub_update, self.establish_cov_subscription, topic,
-        #                        lifetime, renew)
-        pass
+        self.ppm.send(
+            self.proxy_peer,
+            ProtocolProxyMessage(
+                method_name='SETUP_COV',
+                payload=json.dumps({
+                    'subscription_key': topic,
+                    'device_address': self.config.target_address,
+                    'monitored_object_identifier': ':'.join([str(register.object_type), str(register.instance_number)]),
+                    'property_identifier': register.property,
+                    'issue_confirmed_notifications': True,  # TODO: Should this be exposed somewhere in case only unconfirmed notifications are supported?
+                    'lifetime': lifetime.total_seconds()
+                }).encode('utf8'),
+                response_expected=False
+                ))
+
+    @callback
+    def receive_cov(self, _, raw_message: bytes):
+        # TODO: Validation and error handling.
+        _log.debug('@@@@@@@@@ IN RECEIVE_COV')
+        message = json.loads(raw_message.decode('utf8'))
+        _log.debug(f'@@@@@@@@@ Received COV message: {message}')
+        self.driver_agent.publish_push(message)
 
     @classmethod
     def unique_remote_id(cls, config_name: str, config: BacnetRemoteConfig) -> tuple:

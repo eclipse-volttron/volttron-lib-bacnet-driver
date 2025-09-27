@@ -60,7 +60,7 @@ BACNET_TYPE_MAPPING = {  # TODO: Update with additional types.
 
 
 class BacnetPointConfig(PointConfig):
-    array_index: int | None = None # TODO: Is this the correct default for this? What is it?
+    array_index: int | None = None
     bacnet_object_type: str = Field(alias='BACnet Object Type')
     property: str = Field(alias='Property', default='present-value')  # TODO: Should be an Enum of BACnet property types.
     index: int = Field(alias='Index')

@@ -164,7 +164,7 @@ class BACnet(BaseInterface):
                                              local_device_address=self.config.local_device_address)
         _log.debug('BACnet finalize_setup: proxy_peer is: %s', self.proxy_peer)
         if initial_setup is True:
-            self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.ping_target())
+            self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.ping_target)
         # TODO: Consider adding a self.config.remote_refresh_interval to be scheduled as
         #  a periodic here to ping the target with a WhoIs.
         for topic, register in self.point_map.items():

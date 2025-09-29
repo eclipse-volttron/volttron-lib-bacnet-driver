@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "volttron-lib-bacnet-driver"
-version = "0.2.0-rc"
+version = "2.0.0rc0"
 description = "BACnet driver supported and maintained by the Volttron team."
 authors = ["Mark Bonicillo <volttron@pnnl.gov>"]
 license = "Apache License 2.0"
@@ -23,9 +23,10 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.10"
-volttron-lib-base-driver = "^0.2.1rc2"
-bacpypes = "0.16.7"
+python = ">=3.10,<4.0"
+volttron-lib-base-driver = ">=2.0.0rc0"
+bacpypes3 = "0.0.102"
+protocol-proxy-bacnet = "2.0.0rc0"
 
 [tool.poetry.group.dev.dependencies]
 volttron-testing = "^0.4.0rc0"

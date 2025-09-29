@@ -5,42 +5,40 @@
 [![Passing?](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run-tests.yml/badge.svg)](https://github.com/VOLTTRON/volttron-lib-bacnet-driver/actions/workflows/run-tests.yml)
 [![pypi version](https://img.shields.io/pypi/v/volttron-lib-bacnet-driver.svg)](https://pypi.org/project/volttron-lib-bacnet-driver/)
 
-# Requires
-# Requires
+## Pre-requisite
 
-* python >= 3.10
-* bacpypes == "0.16.7"
-* volttron >= 10.0
-* volttron-lib-base-driver
-* volttron-bacnet-proxy
+VOLTTRON (>=11.0.0rc0) should be installed and running.  Its virtual environment should be active.
+Information on how to install of the VOLTTRON platform can be found
+[here](https://github.com/eclipse-volttron/volttron-core/tree/v10)
+
+## Automatically installed dependencies
+
+* volttron-lib-base-driver >= 2.0.0rc0
 
 # Documentation
-More detailed documentation can be found on [ReadTheDocs](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-platform-driver/docs/source/index.html). The RST source
+More detailed documentation can be found on [ReadTheDocs](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-lib-bacnet-driver/index.html#bacnet-driver). The RST source
 of the documentation for this component is located in the "docs" directory of this repository.
 
 
 # Installation
 
-Before installing, VOLTTRON should be installed and running.  Its virtual environment should be active.
-Information on how to install of the VOLTTRON platform can be found
-[here](https://github.com/eclipse-volttron/volttron-core).
 
 1. If it is not already, install the VOLTTRON Platform Driver Agent:
 
     ```shell
-    vctl install volttron-platform-driver --vip-identity platform.driver --start
+    vctl install volttron-platform-driver --vip-identity platform.driver
     ```
 
-2. Install the BACnetProxy Agent:
+2. Install the BACnetProxy Agent. An example configuration can be found [here](https://github.com/eclipse-volttron/volttron-bacnet-proxy/blob/main/config)
 
     ```shell
-    vctl install volttron-bacnet-proxy --agent-config <path to bacnet proxy agent configuration file> --vip-identity platform.bacnet_proxy --start
+    vctl install volttron-bacnet-proxy --agent-config <path to bacnet proxy agent configuration file> --vip-identity platform.bacnet_proxy
     ```
 
 3. Install the VOLTTRON BACnet Driver Library:
 
     ```shell
-    pip install volttron-lib-bacnet-driver
+    poetry add --directory $VOLTTRON_HOME volttron-lib-bacnet-driver
     ```
 
 4. Store device and registry files for the BACnet device to the Platform Driver configuration store:
@@ -52,7 +50,7 @@ Information on how to install of the VOLTTRON platform can be found
         cd config
         ```
 
-    * Create a file called `bacnet.config`; it should contain a JSON object that specifies the configuration of your BACnet driver. An example of such a file is provided at the root of this project; the example file is named 'bacnet.config'. The following JSON is an example of a `bacnet.config`:
+    * Create a file called `device_name.config`; it should contain a JSON object that specifies the configuration of your BACnet driver. An example of such a file is provided at the root of this project; the example file is named 'bacnet.config'. The following JSON is an example of a `bacnet.config`:
     
          ```json
          {
@@ -65,9 +63,7 @@ Information on how to install of the VOLTTRON platform can be found
          }
          ```
 
-         ℹ️ **TIP:** In the `driver_config`, `device_address` is the address bound to the network port over which BACnet communication will happen on the computer running VOLTTRON. This is NOT the address of any target device. See [BACnet Router Addressing](https://eclipse-volttron.readthedocs.io/en/latest/external-docs/volttron-bacnet-proxy/docs/source/bacnet-router-addressing.html).
-
-    * Create another file called `bacnet.csv`; it should contain all the points on the device that you want published to Volttron. An example of such a CSV file is provided at the root of this project; the example CSV file is named 'bacnet.csv'. The following CSV file is an example:
+    * Create another file called `device_name.csv`; it should contain all the points on the device that you want published to Volttron. An example of such a CSV file is provided at the root of this project; the example CSV file is named 'bacnet.csv'. The following CSV file is an example:
 
         ```csv
         Point Name,Volttron Point Name,Units,Unit Details,BACnet Object Type,Property,Writable,Index,Notes
@@ -83,7 +79,7 @@ Information on how to install of the VOLTTRON platform can be found
 
 5. Observe Data
 
-    To see data being published to the bus, install a [Listener Agent](https://pypi.org/project/volttron-listener/):
+    To see data being published to the bus, install a [Listener Agent](https://github.com/eclipse-volttron/volttron-listener):
 
     ```
     vctl install volttron-listener --start
@@ -100,7 +96,7 @@ Information on how to install of the VOLTTRON platform can be found
 
 Please see the following for contributing guidelines [contributing](https://github.com/eclipse-volttron/volttron-core/blob/develop/CONTRIBUTING.md).
 
-Please see the following helpful guide about [developing modular VOLTTRON agents](https://github.com/eclipse-volttron/volttron-core/blob/develop/DEVELOPING_ON_MODULAR.md)
+Please see the following helpful guide about [developing modular VOLTTRON agents](https://eclipse-volttron.readthedocs.io/en/latest/developing-volttron/developing-agents/agent-development.html)
 
 # Disclaimer Notice
 

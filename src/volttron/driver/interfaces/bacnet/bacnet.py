@@ -227,9 +227,8 @@ class BACnet(BaseInterface):
             self.schedule_ping()
 
     def get_point(self, topic: str, on_property: str = None):
-        register: BACnetRegister = self.get_register_by_name(topic)
-        return self.ppm.send(self.proxy_peer,
         register: BACnetRegister = cast(BACnetRegister, self.get_register_by_name(topic))
+        response = self.ppm.send(self.proxy_peer,
                              ProtocolProxyMessage(
                                  method_name='READ_PROPERTY',
                                  payload=json.dumps({

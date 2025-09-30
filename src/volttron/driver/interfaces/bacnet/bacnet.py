@@ -28,7 +28,7 @@ import logging
 from collections.abc import KeysView
 from datetime import datetime, timedelta
 from gevent import Timeout
-from pydantic import computed_field, Field, field_validator, IPvAnyAddress
+from gevent.event import AsyncResult
 from pydantic import computed_field, ConfigDict, Field, field_validator, IPvAnyAddress
 from typing import Any, cast
 
@@ -226,6 +226,20 @@ class BACnet(BaseInterface):
         if not pinged:
             self.schedule_ping()
 
+    def _parse_scalar_response(self, response: Any, topic: str, operation: str) -> Any:
+        response_value = (json.loads(response.get(timeout=self.config.timeout).decode('utf8'))
+                    if isinstance(response, AsyncResult) else {'result': {}, 'error': {topic: response}})
+        _log.debug(f'response_value is a {type(response_value)}: {response_value}')
+        if (result := response_value.get('result')) != {}:
+            _log.debug(f'IF BLOCK, RESULT IS: {result}')
+            return result
+        elif (error := response_value.get('error')) != {}:
+            _log.warning(f'Error {operation} point: {error}')
+            return None
+        else:
+            _log.warning(f'Unknown error {operation} point: {topic}. Response from proxy was: {response_value}')
+            return None
+
     def get_point(self, topic: str, on_property: str = None):
         register: BACnetRegister = cast(BACnetRegister, self.get_register_by_name(topic))
         response = self.ppm.send(self.proxy_peer,
@@ -233,12 +247,13 @@ class BACnet(BaseInterface):
                                  method_name='READ_PROPERTY',
                                  payload=json.dumps({
                                      'device_address': self.config.target_address,
-                                     'object_identifier': str((register.object_type, register.instance_number)),
+                                     'object_identifier': f'{register.object_type}, {register.instance_number}',
                                      'property_identifier': on_property if on_property else register.property,
                                      'property_array_index': register.array_index
                                  }).encode('utf8'),
                                  response_expected=True
                              ))
+        return self._parse_scalar_response(response, topic, 'reading')
 
     def set_point(self, topic, value, priority=None, on_property=None):
         # TODO: support writing from an array.
@@ -250,12 +265,12 @@ class BACnet(BaseInterface):
             raise IOError("Trying to write with a priority lower than the minimum of " +
                           str(self.config.min_priority))
 
-        return self.ppm.send(self.proxy_peer,
+        response = self.ppm.send(self.proxy_peer,
                              ProtocolProxyMessage(
                                  method_name='WRITE_PROPERTY',
                                  payload=json.dumps({
                                      'device_address': self.config.target_address,
-                                     'object_identifier': str((register.object_type, register.instance_number)),
+                                     'object_identifier': f'{register.object_type}, {register.instance_number}',
                                      'property_identifier': on_property if on_property else register.property,
                                      'value': value,
                                      'priority': priority if priority is not None else register.priority,
@@ -263,6 +278,7 @@ class BACnet(BaseInterface):
                                  }).encode('utf8'),
                                  response_expected=True
                              ))
+        return self._parse_scalar_response(response, topic, 'writing')
 
     @staticmethod
     def _query_fields(reg: BacnetPointConfig):
@@ -273,6 +289,7 @@ class BACnet(BaseInterface):
         # TODO: support reading from an array.
         # TODO: Manner of packing and unpacking this request needs to be rethought.
         point_map = {t: self._query_fields(self.point_map[t]) for t in topics if t in self.point_map}
+        result_dict, error_dict = {}, {}
         while True:
             try:
                 # TODO:
@@ -293,7 +310,7 @@ class BACnet(BaseInterface):
                 error_dict = response.get('error', {})
             # TODO: The error handling still reflects the BACnetProxyAgent. How do we do this correctly?
             except Timeout as e:
-                _log.warning(f'Request timed out polling: {self.config.target_address}')
+                _log.warning(f'Request timed out polling: {self.config.target_address}: {e}')
             except RemoteError as e:
                 if "segmentationNotSupported" in e.message:
                     if self.config.max_per_request <= 1:

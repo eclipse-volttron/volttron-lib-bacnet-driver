@@ -30,6 +30,7 @@ from collections.abc import KeysView
 from datetime import datetime, timedelta
 from gevent import Timeout
 from pydantic import computed_field, Field, field_validator, IPvAnyAddress
+from pydantic import computed_field, ConfigDict, Field, field_validator, IPvAnyAddress
 
 # TODO: Make sure these imports work and get rid of noinspection.
 # noinspection PyUnresolvedReferences
@@ -74,6 +75,7 @@ class BacnetPointConfig(PointConfig):
 
 
 class BacnetRemoteConfig(RemoteConfig):
+    model_config = ConfigDict(populate_by_name=True)
     bacnet_network: int = Field(default=0)
     cov_lifetime_configured: float = Field(default=180.0, alias='cov_lifetime')
     device_id: int = Field(ge=0)

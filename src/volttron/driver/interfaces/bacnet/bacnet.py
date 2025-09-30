@@ -25,12 +25,12 @@
 import json
 import logging
 
-from bacpypes3.primitivedata import ObjectIdentifier
 from collections.abc import KeysView
 from datetime import datetime, timedelta
 from gevent import Timeout
 from pydantic import computed_field, Field, field_validator, IPvAnyAddress
 from pydantic import computed_field, ConfigDict, Field, field_validator, IPvAnyAddress
+from typing import Any, cast
 
 # TODO: Make sure these imports work and get rid of noinspection.
 # noinspection PyUnresolvedReferences
@@ -146,7 +146,7 @@ class BACnet(BaseInterface):
         self.register_count_divisor = 1
 
         self.ppm: GeventProtocolProxyManager = GeventProtocolProxyManager.get_manager('bacnet')  # '(BACnetProxy)
-        self.proxy_peer: ProtocolProxyPeer = None
+        self.proxy_peer: ProtocolProxyPeer | None = None
         self.scheduled_ping = None
 
         self.ppm.register_callback(self.receive_cov, 'RECEIVE_COV', provides_response=False)
@@ -165,7 +165,7 @@ class BACnet(BaseInterface):
         self.proxy_peer = self.ppm.get_proxy((self.config.local_device_address, self.config.bacnet_network),
                                              local_device_address=self.config.local_device_address)
         _log.debug('BACnet finalize_setup: proxy_peer is: %s', self.proxy_peer)
-        if initial_setup is True:
+        if initial_setup:
             self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.ping_target)
         # TODO: Consider adding a self.config.remote_refresh_interval to be scheduled as
         #  a periodic here to ping the target with a WhoIs.
@@ -229,6 +229,7 @@ class BACnet(BaseInterface):
     def get_point(self, topic: str, on_property: str = None):
         register: BACnetRegister = self.get_register_by_name(topic)
         return self.ppm.send(self.proxy_peer,
+        register: BACnetRegister = cast(BACnetRegister, self.get_register_by_name(topic))
                              ProtocolProxyMessage(
                                  method_name='READ_PROPERTY',
                                  payload=json.dumps({
@@ -242,7 +243,7 @@ class BACnet(BaseInterface):
 
     def set_point(self, topic, value, priority=None, on_property=None):
         # TODO: support writing from an array.
-        register: BACnetRegister = self.get_register_by_name(topic)
+        register: BACnetRegister = cast(BACnetRegister, self.get_register_by_name(topic))
         if register.read_only:
             raise IOError("Trying to write to a point configured read only: " + topic)
 
@@ -269,7 +270,7 @@ class BACnet(BaseInterface):
         return {'object_id': f'{reg.object_type}, {reg.instance_number}',
                 'property': reg.property, 'array_index': reg.array_index}
 
-    def get_multiple_points(self, topics: KeysView[str], **kwargs) -> (dict, dict):
+    def get_multiple_points(self, topics: KeysView[str], **kwargs) -> tuple[dict, dict]:
         # TODO: support reading from an array.
         # TODO: Manner of packing and unpacking this request needs to be rethought.
         point_map = {t: self._query_fields(self.point_map[t]) for t in topics if t in self.point_map}
@@ -331,7 +332,7 @@ class BACnet(BaseInterface):
 
     def revert_all(self, priority=None):
         """
-        Revert entrire device to it's default state
+        Revert entire device to its default state
         """
         # TODO: Add multipoint write support
         write_registers = self.get_registers_by_type("byte", False)
@@ -340,7 +341,7 @@ class BACnet(BaseInterface):
 
     def revert_point(self, topic, priority=None):
         """
-        Revert point to it's default state
+        Revert point to its default state
         """
         # TODO: Should this have a way to set the revert value to something other than None (e.g., for UCSD's lights)?
         self.set_point(topic, None, priority=priority)

@@ -29,19 +29,13 @@ of the documentation for this component is located in the "docs" directory of th
     vctl install volttron-platform-driver --vip-identity platform.driver
     ```
 
-2. Install the BACnetProxy Agent. An example configuration can be found [here](https://github.com/eclipse-volttron/volttron-bacnet-proxy/blob/main/config)
-
-    ```shell
-    vctl install volttron-bacnet-proxy --agent-config <path to bacnet proxy agent configuration file> --vip-identity platform.bacnet_proxy
-    ```
-
-3. Install the VOLTTRON BACnet Driver Library:
+1. Install the VOLTTRON BACnet Driver Library:
 
     ```shell
     poetry add --directory $VOLTTRON_HOME volttron-lib-bacnet-driver
     ```
 
-4. Store device and registry files for the BACnet device to the Platform Driver configuration store:
+1. Store device and registry files for the BACnet device to the Platform Driver configuration store:
 
     * Create a config directory and navigate to it:
 
@@ -77,7 +71,7 @@ of the documentation for this component is located in the "docs" directory of th
          vctl config store platform.driver devices/bacnet bacnet.config
          ```
 
-5. Observe Data
+1. Observe Data
 
     To see data being published to the bus, install a [Listener Agent](https://github.com/eclipse-volttron/volttron-listener):
 

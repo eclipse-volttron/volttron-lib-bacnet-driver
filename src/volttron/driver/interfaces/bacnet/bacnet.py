@@ -344,7 +344,7 @@ class BACnet(BaseInterface):
 
     def set_multiple_points(self, topics_values, **kwargs):
         # TODO: Implement SET_PROPERTY_MULTIPLE in BACnetProtocolProxy
-        super(BACnet, self).set_multiple_points(topics_values, **kwargs)
+        return super(BACnet, self).set_multiple_points(topics_values, **kwargs)
 
     def revert_all(self, priority=None):
         """

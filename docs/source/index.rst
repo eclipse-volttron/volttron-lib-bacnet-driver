@@ -9,7 +9,7 @@ automatically manage one or more proxy processes, spinning them up as needed to 
 BACnet networks. One proxy will be created for each specified combination of `local_device_address`
 and `bacnet_network`.
 
-.. image:: files/bacnet_get_flow.svg
+.. image:: files/bacnet_data_flow.svg
 
 .. note::
     Versions of the BACnet driver prior to VOLTTRON 11.1 used a separate BACnet Proxy Agent to act as the local BACnet

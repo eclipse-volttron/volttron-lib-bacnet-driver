@@ -64,7 +64,7 @@ class BacnetPointConfig(PointConfig):
     array_index: int | None = None
     bacnet_object_type: str = Field(alias='BACnet Object Type')
     property: str = Field(alias='Property', default='present-value')  # TODO: Should be an Enum of BACnet property types.
-    index: int = Field(alias='Index')
+    index: int = Field(alias='Index')  # TODO: This should really be "instance". Make index/Index an alias of instance/Instance.
     cov_flag: bool = Field(default=False, alias='COV Flag')
     write_priority: int | None = Field(default=16, ge=1, le=16, alias='Write Priority')
 
@@ -294,7 +294,7 @@ class BACnet(BaseInterface):
             try:
                 # TODO:
                 #  Need to honor self.config.max_per_request, and probably detect it.
-                #  Need to loop if not self.config.use_read_multiple --- Probably want to use batchread!
+                #  Need to loop if not self.config.use_read_multiple
                 response = self.ppm.send(self.proxy_peer,
                                      ProtocolProxyMessage(
                                          method_name='BATCH_READ',

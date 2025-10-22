@@ -208,10 +208,10 @@ class BACnet(BaseInterface):
                          ProtocolProxyMessage(
                              method_name='WHO_IS',
                              payload=json.dumps({
-                                 'low_limit': self.config.device_id,
-                                 'high_limit': self.config.device_id,
-                                 'address': self.config.target_address
-                                                }).encode('utf8'),
+                                 'device_instance_low': self.config.device_id,
+                                 'device_instance_high': self.config.device_id,
+                                 'dest': self.config.target_address
+                             }).encode('utf8'),
                             response_expected=False
                          ))
             pinged = True

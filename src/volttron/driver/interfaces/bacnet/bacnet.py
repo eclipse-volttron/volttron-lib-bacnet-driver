@@ -68,6 +68,14 @@ class BacnetPointConfig(PointConfig):
     cov_flag: bool = Field(default=False, alias='COV Flag')
     write_priority: int | None = Field(default=16, ge=1, le=16, alias='Write Priority')
 
+    @field_validator('cov_flag', mode='before')
+    def empty_string_to_false(cls, v):
+        if isinstance(str, v):
+            v = v.strip()
+        if v == '':
+            return False
+        return v
+
     @field_validator('write_priority', mode='before')
     @classmethod
     def _normalize_write_priority(cls, v):

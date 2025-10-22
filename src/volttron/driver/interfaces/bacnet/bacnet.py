@@ -70,7 +70,7 @@ class BacnetPointConfig(PointConfig):
 
     @field_validator('cov_flag', mode='before')
     def empty_string_to_false(cls, v):
-        if isinstance(str, v):
+        if isinstance(v, str):
             v = v.strip()
         if v == '':
             return False

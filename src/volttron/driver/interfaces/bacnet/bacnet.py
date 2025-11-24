@@ -100,6 +100,15 @@ class BacnetRemoteConfig(RemoteConfig):
             self.cov_lifetime_configured = v.total_seconds()
 
     @computed_field
+    @property
+    def time_synchronization_interval(self) -> timedelta:
+        return timedelta(seconds=self.time_synchronization_seconds)
+
+    @time_synchronization_interval.setter
+    def time_synchronization_interval(self, v):
+        if isinstance(v, timedelta):
+            self.time_synchronization_seconds = v.total_seconds()
+
     @computed_field
     @property
     def bacnet_port(self) -> int:
@@ -151,6 +160,7 @@ class BACnet(BaseInterface):
         self.ppm: GeventProtocolProxyManager = GeventProtocolProxyManager.get_manager('bacnet')  # '(BACnetProxy)
         self.proxy_peer: ProtocolProxyPeer | None = None
         self.scheduled_ping = None
+        self.time_synchronization_active = False
 
         self.ppm.register_callback(self.receive_cov, 'RECEIVE_COV', provides_response=False)
         self.ppm.start()  # TODO: Does this and/or select_loop spawn need to be in finalize_setup? (If not, keep here.)
@@ -172,6 +182,7 @@ class BACnet(BaseInterface):
             self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.ping_target)
         # TODO: Consider adding a self.config.remote_refresh_interval to be scheduled as
         #  a periodic here to ping the target with a WhoIs.
+        self.setup_time_synchronization()
         for topic, register in self.point_map.items():
             if register.is_cov:
                 self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.establish_cov_subscription,
@@ -338,6 +349,21 @@ class BACnet(BaseInterface):
         """
         # TODO: Should this have a way to set the revert value to something other than None (e.g., for UCSD's lights)?
         self.set_point(topic, None, priority=priority)
+
+    def setup_time_synchronization(self):
+        interval = self.config.time_synchronization_interval
+        if interval is not None or self.time_synchronization_active:
+            interval_seconds =  interval.total_seconds if interval else None
+            self.ppm.send(self.proxy_peer,
+                          ProtocolProxyMessage(
+                              method_name='SETUP_TIME_SYNCHRONIZATION',
+                              payload=json.dumps({
+                                  'device_address': self.config.target_address,
+                                  'interval': interval_seconds,
+                              }).encode('utf8'),
+                              response_expected=False
+                          ))
+            self.time_synchronization_active = False if interval is None else True
 
     def establish_cov_subscription(self, register, topic, lifetime):
         """

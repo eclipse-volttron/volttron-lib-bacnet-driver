@@ -294,12 +294,11 @@ class BACnet(BaseInterface):
         # TODO: Manner of packing and unpacking this request needs to be rethought.
         point_map = {t: self._query_fields(self.point_map[t]) for t in topics if t in self.point_map}
         result_dict, error_dict = {}, {}
-        while True:
-            try:
-                # TODO:
-                #  Need to honor self.config.max_per_request, and probably detect it.
-                #  Need to loop if not self.config.use_read_multiple
-                response = self.ppm.send(self.proxy_peer,
+        # while True:
+        try:
+            # TODO:
+            #  Need to honor self.config.max_per_request, and probably detect it.
+            response = self.ppm.send(self.proxy_peer,
                                      ProtocolProxyMessage(
                                          method_name='BATCH_READ',
                                          payload=json.dumps({
@@ -308,43 +307,17 @@ class BACnet(BaseInterface):
                                          }).encode('utf8'),
                                          response_expected=True
                                      )).get(timeout=self.config.timeout).decode('utf8')
-                _log.debug(f"RESPONSE IS: {response}")
-                response = json.loads(response)
-                result_dict = response.get('result', {})
-                error_dict = response.get('error', {})
-            # TODO: The error handling still reflects the BACnetProxyAgent. How do we do this correctly?
-            except Timeout as e:
-                _log.warning(f'Request timed out polling: {self.config.target_address}: {e}')
-            except RemoteError as e:
-                if "segmentationNotSupported" in e.message:
-                    if self.config.max_per_request <= 1:
-                        _log.error(
-                            "Receiving a segmentationNotSupported error with 'max_per_request' setting of 1."
-                        )
-                        raise
-                    self.register_count_divisor += 1
-                    self.config.max_per_request = max(
-                        int(self.register_count / self.register_count_divisor)+1, 1)
-                    _log.info("Device requires a lower max_per_request setting. Trying: " +
-                              str(self.config.max_per_request))
-                    continue
-                elif e.message.endswith("rejected the request: 9") and self.config.use_read_multiple:
-                    _log.info(
-                        "Device rejected request with 'unrecognized-service' error, attempting to access with use_read_multiple false"
-                    )
-                    self.config.use_read_multiple = False
-                    continue
-                else:
-                    raise
-            except errors.Unreachable:
-                # If the Proxy is not running bail.
-                _log.warning("Unable to reach BACnet proxy.")
-                self.schedule_ping()
-                raise
-            _log.debug(f'RECEIVED ERROR: {error_dict}')
-            _log.debug(f'RECEIVED RESULT: {result_dict}')
-            return result_dict, error_dict
-        # return ret_dict, {}  # TODO: Need error dict, if possible.
+            _log.debug(f"RESPONSE IS: {response}")
+            response = json.loads(response)
+            result_dict = response.get('result', {})
+            error_dict = response.get('error', {})
+        except Timeout as e:
+            _log.warning(f'Request timed out polling: {self.config.target_address}: {e}')
+        except Exception as e:
+            _log.warning(f'Unexpected error in get_multiple_points: {e}')
+        _log.debug(f'RECEIVED ERROR: {error_dict}')
+        _log.debug(f'RECEIVED RESULT: {result_dict}')
+        return result_dict, error_dict
 
     def set_multiple_points(self, topics_values, **kwargs):
         # TODO: Implement SET_PROPERTY_MULTIPLE in BACnetProtocolProxy
@@ -393,7 +366,10 @@ class BACnet(BaseInterface):
         _log.debug('@@@@@@@@@ IN RECEIVE_COV')
         message = json.loads(raw_message.decode('utf8'))
         _log.debug(f'@@@@@@@@@ Received COV message: {message}')
-        self.driver_agent.publish_push(message)
+        if error := message.get('error', []):
+            _log.warning(f'Error received in COV push: {error}')
+        if result := message.get('result', {}):
+            self.driver_agent.publish_push(result)
 
     @classmethod
     def unique_remote_id(cls, config_name: str, config: BacnetRemoteConfig) -> tuple:

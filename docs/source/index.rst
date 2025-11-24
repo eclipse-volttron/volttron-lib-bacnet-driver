@@ -5,16 +5,16 @@ BACnet Driver
 =============
 The BACnet driver interface enables the ability for the platform driver to communicate with BACnet devices.
 Communication with devices is handled by a helper process referred to as a BACnet proxy. The BACnet interface will
-automatically manage one or more proxy processes, spinning them up as needed to handle communication with unique
-BACnet networks. One proxy will be created for each specified combination of `local_device_address`
-and `bacnet_network`.
+automatically manage one or more proxy processes, spinning them up as needed to handle communication with distinct
+BACnet networks. One proxy will be created for each specified combination of `local_interface`
+and `bacnet_port`.
 
 .. image:: files/bacnet_data_flow.svg
 
 .. note::
     Versions of the BACnet driver prior to VOLTTRON 11.1 used a separate BACnet Proxy Agent to act as the local BACnet
     device for communication on the network. This is no longer necessary as the driver now automatically spins up one
-    or more proxy processes as needed. Note that the `local_device_address`and `bacnet_network` settings were previously
+    or more proxy processes as needed. Note that the `local_interface`and `bacnet_port` settings were previously
     configured as the address and port for the BACnet Proxy Agent. While the default settings will work for most
     installations, if you have multiple BACnet networks or need to specify a particular local address,
     this may now be configured in the settings for each device.
@@ -57,10 +57,11 @@ For BACnet devcies, the `driver_config` section of the device configuration file
       will be used to determine the lifetime and renewal period for the subscription, in seconds. (Defaults to 180.)
     - **timeout** - (Optional) The number of seconds to wait for a response from the device before
       considering the request failed. (Defaults to 30 seconds.)
-    - **local_device_address** - (Optional) The IP address on which the local BACnet device should be bound.
-      (Defaults to '0.0.0.0')
-    - **bacnet_network** - (Optional) The BACnet network number of the local BACnet device.
-      0 is the default for BACnet/IP and corresponds to UDP port 47808, while 1 corresponds to 47809, etc.
+    - **local_device_interface** - (Optional) The IP interface on which the local BACnet device should be bound.
+      The interface will typically be specified in CIDR notation (e.g., 192.168.1.0/24). By default, the driver
+      will attempt to discover the correct interface, but this can only succeed if the device is discoverable.
+    - **bacnet_port** - (Optional) The BACnet port number of the local BACnet device. By convention, BACnet ports are
+      numbered from 0 --- which corresponds to UDP port 47808 (0xBAC0), while 1 corresponds to 47809 (0xBAC1), etc.
       (Defaults to 0)
 
 Here is an example device configuration file:
@@ -103,7 +104,7 @@ The following attributes are required for each record:
       point.
     - **units** - The unit of the data. Included in publishes as meta data and used by the historian.
     - **bacnet_object_type** - A string representing the type of BACnet object the point is.
-      This may be specified in a hyphenated format (e.g., analog-input) or lower camelCase: (e.g., analogInput).
+      This may be specified in a hyphenated format (e.g., analog-input) or lower camelCase: (e.g., analog-input).
       Examples include:
 
         * analog-input
@@ -115,11 +116,11 @@ The following attributes are required for each record:
         * multi-state-value
 
     - **property** - A string representing the name of the property belonging to the object.  Usually, this will be
-      `presentValue`.
+      `present-value`.
     - **writable** - Either `TRUE` or `FALSE`.  Determines if the point can be written to.  Only points labeled `TRUE`
       can be written to through the Actuator Agent.  Points labeled `TRUE` incorrectly will cause an error to be
       returned when an agent attempts to write to the point.
-    - **index** - The instance number of the BACnet object.
+    - **instance** - The instance number of the BACnet object.
 
 The following columns are optional:
 
@@ -136,16 +137,16 @@ column to include the device documentation's name for the point and `notes` and 
 information about a point.
 
 .. csv-table:: BACnet
-        :header: Point Name,Volttron Point Name,Units,Unit Details,BACnet Object Type,Property,Writable,Index,Notes
+        :header: Point Name,Volttron Point Name,Units,Unit Details,BACnet Object Type,Property,Writable,Instance,Notes
 
-        Building/FCB.Local Application.PH-T,PreheatTemperature,degreesFahrenheit,-50.00 to 250.00,analogInput,presentValue,FALSE,3000119,Resolution: 0.1
-        Building/FCB.Local Application.RA-T,ReturnAirTemperature,degreesFahrenheit,-50.00 to 250.00,analogInput,presentValue,FALSE,3000120,Resolution: 0.1
-        Building/FCB.Local Application.RA-H,ReturnAirHumidity,percentRelativeHumidity,0.00 to 100.00,analogInput,presentValue,FALSE,3000124,Resolution: 0.1
-        Building/FCB.Local Application.CLG-O,CoolingValveOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,presentValue,TRUE,3000107,Resolution: 0.1
-        Building/FCB.Local Application.MAD-O,MixedAirDamperOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,presentValue,TRUE,3000110,Resolution: 0.1
-        Building/FCB.Local Application.PH-O,PreheatValveOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,presentValue,TRUE,3000111,Resolution: 0.1
-        Building/FCB.Local Application.RH-O,ReheatValveOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,presentValue,TRUE,3000112,Resolution: 0.1
-        Building/FCB.Local Application.SF-O,SupplyFanSpeedOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,presentValue,TRUE,3000113,Resolution: 0.1
+        Building/FCB.Local Application.PH-T,PreheatTemperature,degreesFahrenheit,-50.00 to 250.00,analog-input,present-value,FALSE,3000119,Resolution: 0.1
+        Building/FCB.Local Application.RA-T,ReturnAirTemperature,degreesFahrenheit,-50.00 to 250.00,analog-input,present-value,FALSE,3000120,Resolution: 0.1
+        Building/FCB.Local Application.RA-H,ReturnAirHumidity,percentRelativeHumidity,0.00 to 100.00,analog-input,present-value,FALSE,3000124,Resolution: 0.1
+        Building/FCB.Local Application.CLG-O,CoolingValveOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,present-value,TRUE,3000107,Resolution: 0.1
+        Building/FCB.Local Application.MAD-O,MixedAirDamperOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,present-value,TRUE,3000110,Resolution: 0.1
+        Building/FCB.Local Application.PH-O,PreheatValveOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,present-value,TRUE,3000111,Resolution: 0.1
+        Building/FCB.Local Application.RH-O,ReheatValveOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,present-value,TRUE,3000112,Resolution: 0.1
+        Building/FCB.Local Application.SF-O,SupplyFanSpeedOutputCommand,percent,0.00 to 100.00 (default 0.0),analogOutput,present-value,TRUE,3000113,Resolution: 0.1
 
 
 A sample BACnet registry file can be found `here <https://raw.githubusercontent.com/eclipse-volttron/volttron-lib-bacnet-driver/main/bacnet.csv>`_ or

@@ -29,20 +29,16 @@ from collections.abc import KeysView
 from datetime import datetime, timedelta
 from gevent import Timeout
 from gevent.event import AsyncResult
-from pydantic import computed_field, ConfigDict, Field, field_validator, IPvAnyAddress
-from typing import Any, cast
+from pydantic import AliasChoices, computed_field, Field, IPvAnyInterface
+from typing import Annotated, Any, cast
 
-# TODO: Make sure these imports work and get rid of noinspection.
-# noinspection PyUnresolvedReferences
 from protocol_proxy.ipc import ProtocolProxyMessage, ProtocolProxyPeer, callback
-# noinspection PyUnresolvedReferences
 from protocol_proxy.manager.gevent import GeventProtocolProxyManager
 
 from volttron.client.vip.agent import errors
-from volttron.driver.base.config import PointConfig, RemoteConfig
+from volttron.driver.base.config import empty_str_is, PointConfig, RemoteConfig
 from volttron.driver.base.driver_exceptions import DriverConfigError
 from volttron.driver.base.interfaces import BaseInterface, BaseRegister
-from volttron.utils.jsonrpc import RemoteError
 
 _log = logging.getLogger(__name__)
 
@@ -61,37 +57,24 @@ BACNET_TYPE_MAPPING = {  # TODO: Update with additional types.
 
 
 class BacnetPointConfig(PointConfig):
-    array_index: int | None = None
-    bacnet_object_type: str = Field(alias='BACnet Object Type')
-    property: str = Field(alias='Property', default='present-value')  # TODO: Should be an Enum of BACnet property types.
-    index: int = Field(alias='Index')  # TODO: This should really be "instance". Make index/Index an alias of instance/Instance.
-    cov_flag: bool = Field(default=False, alias='COV Flag')
-    write_priority: int | None = Field(default=16, ge=1, le=16, alias='Write Priority')
-
-    @field_validator('cov_flag', mode='before')
-    def empty_string_to_false(cls, v):
-        if isinstance(v, str):
-            v = v.strip()
-        if v == '':
-            return False
-        return v
-
-    @field_validator('write_priority', mode='before')
-    @classmethod
-    def _normalize_write_priority(cls, v):
-        return 16 if v == '' else float(v)
+    array_index: Annotated[int | None, empty_str_is(None)] = None
+    object_type: str = Field(validation_alias=AliasChoices('Object Type','BACnet Object Type', 'bacnet_object_type'))
+    property: Annotated[str, empty_str_is('present-value')] = Field(alias='Property', default='present-value')  # TODO: Should be an Enum of BACnet property types.
+    instance: int = Field(validation_alias=AliasChoices('Instance', 'Index', 'index'))
+    cov_flag: Annotated[bool, empty_str_is(False)] = Field(default=False, alias='COV Flag')
+    write_priority: Annotated[int, empty_str_is(16)] = Field(default=16, ge=1, le=16, alias='Write Priority')
 
 
 class BacnetRemoteConfig(RemoteConfig):
-    model_config = ConfigDict(populate_by_name=True)
-    bacnet_network: int = Field(default=0)
-    cov_lifetime_configured: float = Field(default=180.0, alias='cov_lifetime')
+    # TODO: Confirm this is not needed now that it is added to superclass: model_config = ConfigDict(populate_by_name=True)
+    bacnet_port_configured: int = Field(default=0)
+    cov_lifetime_configured: float = Field(default=180.0, alias='cov_lifetime')  # TODO: Can this by by point instead?
     device_id: int = Field(ge=0)
-    local_device_address: IPvAnyAddress = Field(default='0.0.0.0')  # TODO: Should this be IpvAnyInterface? (i.e., should it allow CIDR specification?)
+    local_interface: IPvAnyInterface = Field(default='0.0.0.0/32')  # TODO: We should attempt to discover the interface.
     max_per_request: int = Field(ge=0, default=24)
     min_priority: int = Field(default=8, ge=1, le=16)
     ping_retry_interval_configured: float = Field(alias='ping_retry_interval', default=5.0)
-    proxy_vip_identity: str = Field(alias="proxy_address", default="platform.bacnet_proxy")
+    time_synchronization_seconds: float | None = Field(default=None, ge=0, alias='time_synchronization_interval')
     target_address: str = Field(alias="device_address")
     timeout: float = Field(ge=0, default=30.0)
     use_read_multiple: bool = True
@@ -116,6 +99,18 @@ class BacnetRemoteConfig(RemoteConfig):
         if isinstance(v, timedelta):
             self.cov_lifetime_configured = v.total_seconds()
 
+    @computed_field
+    @computed_field
+    @property
+    def bacnet_port(self) -> int:
+        if self.bacnet_port_configured >= 47808:
+            return self.bacnet_port_configured - 47808
+        else:
+            return self.bacnet_port_configured
+
+    @bacnet_port.setter
+    def bacnet_port(self, v):
+        self.cov_lifetime_configured = int(v)
 
 class BACnetRegister(BaseRegister):
 
@@ -170,8 +165,8 @@ class BACnet(BaseInterface):
         # TODO: This will be called after every device is added.  If this is an issue, we would need a different hook.
         #  It could be called on every remote after the end of a setup loop, possibly?
         _log.debug('BACnet finalize_setup called.')
-        self.proxy_peer = self.ppm.get_proxy((self.config.local_device_address, self.config.bacnet_network),
-                                             local_device_address=self.config.local_device_address)
+        self.proxy_peer = self.ppm.get_proxy((self.config.local_interface, self.config.bacnet_port),
+                                             local_interface=self.config.local_interface)
         _log.debug('BACnet finalize_setup: proxy_peer is: %s', self.proxy_peer)
         if initial_setup:
             self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.ping_target)
@@ -179,7 +174,8 @@ class BACnet(BaseInterface):
         #  a periodic here to ping the target with a WhoIs.
         for topic, register in self.point_map.items():
             if register.is_cov:
-                self.establish_cov_subscription(register, topic, self.config.cov_lifetime)
+                self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.establish_cov_subscription,
+                                              register, topic, self.config.cov_lifetime)
 
     def create_register(self, register_definition: BacnetPointConfig) -> BACnetRegister:
         if register_definition.write_priority < self.config.min_priority:
@@ -187,8 +183,8 @@ class BACnet(BaseInterface):
                 f"{register_definition.volttron_point_name} configured with a priority"
                 f" {register_definition.write_priority} which is lower than than minimum {self.config.min_priority}.")
 
-        return BACnetRegister(register_definition.index,
-                              register_definition.bacnet_object_type,
+        return BACnetRegister(register_definition.instance,
+                              register_definition.object_type,
                               register_definition.property,
                               register_definition.writable is False,
                               register_definition.volttron_point_name,

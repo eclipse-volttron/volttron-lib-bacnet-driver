@@ -175,8 +175,8 @@ class BACnet(BaseInterface):
         # TODO: This will be called after every device is added.  If this is an issue, we would need a different hook.
         #  It could be called on every remote after the end of a setup loop, possibly?
         _log.debug('BACnet finalize_setup called.')
-        self.proxy_peer = self.ppm.get_proxy((self.config.local_interface, self.config.bacnet_port),
-                                             local_interface=self.config.local_interface)
+        self.proxy_peer = self.ppm.get_proxy((str(self.config.local_interface), self.config.bacnet_port),
+                                             local_interface=str(self.config.local_interface))
         _log.debug('BACnet finalize_setup: proxy_peer is: %s', self.proxy_peer)
         if initial_setup:
             self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.ping_target)

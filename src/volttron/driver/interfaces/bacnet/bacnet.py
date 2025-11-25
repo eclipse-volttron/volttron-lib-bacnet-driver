@@ -353,13 +353,14 @@ class BACnet(BaseInterface):
     def setup_time_synchronization(self):
         interval = self.config.time_synchronization_interval
         if interval is not None or self.time_synchronization_active:
-            interval_seconds =  interval.total_seconds if interval else None
+            interval_seconds =  interval.total_seconds() if interval else None
             self.ppm.send(self.proxy_peer,
                           ProtocolProxyMessage(
                               method_name='SETUP_TIME_SYNCHRONIZATION',
                               payload=json.dumps({
                                   'device_address': self.config.target_address,
                                   'interval': interval_seconds,
+                                  'time_zone': self.driver_agent.tz
                               }).encode('utf8'),
                               response_expected=False
                           ))

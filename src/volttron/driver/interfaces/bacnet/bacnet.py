@@ -165,7 +165,7 @@ class BACnet(BaseInterface):
         self.ppm.register_callback(self.receive_cov, 'RECEIVE_COV', provides_response=False)
         self.ppm.start()  # TODO: Does this and/or select_loop spawn need to be in finalize_setup? (If not, keep here.)
         self.driver_agent.core.spawn(self.ppm.select_loop)
-        _log.debug('AFTER BACNET INTERFACE INIT')
+        #_log.debug('AFTER BACNET INTERFACE INIT')
 
     @property
     def register_count(self):
@@ -174,7 +174,7 @@ class BACnet(BaseInterface):
     def finalize_setup(self, initial_setup: bool = False):
         # TODO: This will be called after every device is added.  If this is an issue, we would need a different hook.
         #  It could be called on every remote after the end of a setup loop, possibly?
-        _log.debug('BACnet finalize_setup called.')
+        #_log.debug('BACnet finalize_setup called.')
         self.proxy_peer = self.ppm.get_proxy((str(self.config.local_interface), self.config.bacnet_port),
                                              local_interface=str(self.config.local_interface))
         _log.debug('BACnet finalize_setup: proxy_peer is: %s', self.proxy_peer)
@@ -244,9 +244,9 @@ class BACnet(BaseInterface):
     def _parse_scalar_response(self, response: Any, topic: str, operation: str) -> Any:
         response_value = (json.loads(response.get(timeout=self.config.timeout).decode('utf8'))
                     if isinstance(response, AsyncResult) else {'result': {}, 'error': {topic: response}})
-        _log.debug(f'response_value is a {type(response_value)}: {response_value}')
+        #_log.debug(f'response_value is a {type(response_value)}: {response_value}')
         if (result := response_value.get('result')) != {}:
-            _log.debug(f'IF BLOCK, RESULT IS: {result}')
+            #_log.debug(f'IF BLOCK, RESULT IS: {result}')
             return result
         elif (error := response_value.get('error')) != {}:
             msg = f'Error {operation} point: {error}'
@@ -318,7 +318,7 @@ class BACnet(BaseInterface):
                                          }).encode('utf8'),
                                          response_expected=True
                                      )).get(timeout=self.config.timeout).decode('utf8')
-            _log.debug(f"RESPONSE IS: {response}")
+            #_log.debug(f"RESPONSE IS: {response}")
             response = json.loads(response)
             result_dict = response.get('result', {})
             error_dict = response.get('error', {})
@@ -326,8 +326,8 @@ class BACnet(BaseInterface):
             _log.warning(f'Request timed out polling: {self.config.target_address}: {e}')
         except Exception as e:
             _log.warning(f'Unexpected error in get_multiple_points: {e}')
-        _log.debug(f'RECEIVED ERROR: {error_dict}')
-        _log.debug(f'RECEIVED RESULT: {result_dict}')
+        #_log.debug(f'RECEIVED ERROR: {error_dict}')
+        #_log.debug(f'RECEIVED RESULT: {result_dict}')
         return result_dict, error_dict
 
     def set_multiple_points(self, topics_values, **kwargs):
@@ -390,9 +390,9 @@ class BACnet(BaseInterface):
     @callback
     def receive_cov(self, _, raw_message: bytes):
         # TODO: Validation and error handling.
-        _log.debug('@@@@@@@@@ IN RECEIVE_COV')
+        #_log.debug('@@@@@@@@@ IN RECEIVE_COV')
         message = json.loads(raw_message.decode('utf8'))
-        _log.debug(f'@@@@@@@@@ Received COV message: {message}')
+        #_log.debug(f'@@@@@@@@@ Received COV message: {message}')
         if error := message.get('error', []):
             _log.warning(f'Error received in COV push: {error}')
         if result := message.get('result', {}):

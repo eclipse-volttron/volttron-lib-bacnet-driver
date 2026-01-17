@@ -249,11 +249,11 @@ class BACnet(BaseInterface):
             _log.debug(f'IF BLOCK, RESULT IS: {result}')
             return result
         elif (error := response_value.get('error')) != {}:
-            _log.warning(f'Error {operation} point: {error}')
-            return None
+            msg = f'Error {operation} point: {error}'
         else:
-            _log.warning(f'Unknown error {operation} point: {topic}. Response from proxy was: {response_value}')
-            return None
+            msg = f'Unknown error {operation} point: {topic}. Response from proxy was: {response_value}'
+        _log.warning(msg)
+        raise RuntimeError(msg)
 
     def get_point(self, topic: str, on_property: str = None):
         register: BACnetRegister = cast(BACnetRegister, self.get_register_by_name(topic))

@@ -249,7 +249,7 @@ class BACnet(BaseInterface):
             #_log.debug(f'IF BLOCK, RESULT IS: {result}')
             return result
         elif (error := response_value.get('error')) != {}:
-            msg = f'Error {operation} point: {error}'
+            msg = f'Error {operation} point: {topic} --- {error}'
         else:
             msg = f'Unknown error {operation} point: {topic}. Response from proxy was: {response_value}'
         _log.warning(msg)

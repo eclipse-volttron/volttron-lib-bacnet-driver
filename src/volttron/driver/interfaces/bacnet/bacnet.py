@@ -102,7 +102,7 @@ class BacnetRemoteConfig(RemoteConfig):
     @computed_field
     @property
     def time_synchronization_interval(self) -> timedelta:
-        return timedelta(seconds=self.time_synchronization_seconds)
+        return timedelta(seconds=self.time_synchronization_seconds) if self.time_synchronization_seconds else None
 
     @time_synchronization_interval.setter
     def time_synchronization_interval(self, v):

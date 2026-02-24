@@ -35,7 +35,6 @@ from typing import Annotated, Any, cast
 from protocol_proxy.ipc import ProtocolProxyMessage, ProtocolProxyPeer, callback
 from protocol_proxy.manager.gevent import GeventProtocolProxyManager
 
-from volttron.client.vip.agent import errors
 from volttron.driver.base.config import empty_str_is, PointConfig, RemoteConfig
 from volttron.driver.base.driver_exceptions import DriverConfigError
 from volttron.driver.base.interfaces import BaseInterface, BaseRegister
@@ -231,10 +230,8 @@ class BACnet(BaseInterface):
                          ))
             pinged = True
         # TODO: What exceptions might we really encounter, now, through PPM?
-        except errors.Unreachable:
-            _log.warning("Unable to reach BACnet proxy.")
-        except errors.VIPError:
-            _log.warning("Error trying to ping device.")
+        except Exception as e:
+            _log.warning(f"Error trying to ping device: {e}")
 
         self.scheduled_ping = None
         # Schedule retry.

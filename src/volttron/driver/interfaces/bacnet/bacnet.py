@@ -396,6 +396,6 @@ class BACnet(BaseInterface):
             self.driver_agent.publish_push(result)
 
     @classmethod
-    def unique_remote_id(cls, config_name: str, config: BacnetRemoteConfig) -> tuple:
-        # TODO: This should probably incorporate information which currently belongs to the BACnet Proxy Agent.
-        return config.target_address, config.device_id
+    def unique_remote_id(cls, config_name: str, config: RemoteConfig) -> tuple:
+        bacnet_config = cls.INTERFACE_CONFIG_CLASS(**config.model_dump())
+        return bacnet_config.target_address, bacnet_config.device_id

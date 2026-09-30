@@ -24,7 +24,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
-volttron-lib-base-driver = ">=2.0.0rc3"
+volttron-lib-base-driver = ">=2.0.0rc6"
 protocol-proxy-bacnet = ">=2.0.0rc3"
 
 [tool.poetry.group.dev.dependencies]

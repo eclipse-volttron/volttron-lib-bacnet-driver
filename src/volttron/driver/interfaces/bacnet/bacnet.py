@@ -25,19 +25,21 @@
 import json
 import logging
 
-from collections.abc import KeysView
+from math import ceil
+
+from collections.abc import Iterable, KeysView
 from datetime import datetime, timedelta
 from gevent import Timeout
 from gevent.event import AsyncResult
 from pydantic import AliasChoices, computed_field, Field, IPvAnyInterface
-from typing import Annotated, Any, cast
+from typing import ClassVar, Annotated, Any, cast
 
 from protocol_proxy.ipc import ProtocolProxyMessage, ProtocolProxyPeer, callback
 from protocol_proxy.manager.gevent import GeventProtocolProxyManager
 
 from volttron.driver.base.config import empty_str_is, PointConfig, RemoteConfig
 from volttron.driver.base.driver_exceptions import DriverConfigError
-from volttron.driver.base.interfaces import BaseInterface, BaseRegister
+from volttron.driver.base.interfaces import BaseInterface, BaseRegister, DriverInterfaceError
 
 _log = logging.getLogger(__name__)
 
@@ -57,16 +59,16 @@ BACNET_TYPE_MAPPING = {  # TODO: Update with additional types.
 
 class BacnetPointConfig(PointConfig):
     array_index: Annotated[int | None, empty_str_is(None)] = None
-    object_type: str = Field(validation_alias=AliasChoices('Object Type','BACnet Object Type', 'bacnet_object_type'))
+    object_type: str = Field(validation_alias=AliasChoices('object_type', 'Object Type','BACnet Object Type', 'bacnet_object_type'))
     property: Annotated[str, empty_str_is('present-value')] = Field(alias='Property', default='present-value')  # TODO: Should be an Enum of BACnet property types.
-    instance: int = Field(validation_alias=AliasChoices('Instance', 'Index', 'index'))
+    instance: int = Field(validation_alias=AliasChoices('instance','Instance', 'Index', 'index'))
     cov_flag: Annotated[bool, empty_str_is(False)] = Field(default=False, alias='COV Flag')
     write_priority: Annotated[int, empty_str_is(16)] = Field(default=16, ge=1, le=16, alias='Write Priority')
 
 
 class BacnetRemoteConfig(RemoteConfig):
     # TODO: Confirm this is not needed now that it is added to superclass: model_config = ConfigDict(populate_by_name=True)
-    bacnet_port_configured: int = Field(default=0)
+    bacnet_port_configured: int = Field(default=0, alias='bacnet_port')
     cov_lifetime_configured: float = Field(default=180.0, alias='cov_lifetime')  # TODO: Can this by by point instead?
     device_id: int = Field(ge=0)
     local_interface: IPvAnyInterface = Field(default='0.0.0.0/32')  # TODO: We should attempt to discover the interface.
@@ -75,8 +77,41 @@ class BacnetRemoteConfig(RemoteConfig):
     ping_retry_interval_configured: float = Field(alias='ping_retry_interval', default=5.0)
     time_synchronization_seconds: float | None = Field(default=None, ge=0, alias='time_synchronization_interval')
     target_address: str = Field(alias="device_address")
-    timeout: float = Field(ge=0, default=30.0)
+    # Device-level: how long the proxy waits for this device to answer one request, and how often it retries.
+    # These configure the shared proxy process for this local interface; the first device to launch it wins.
+    apdu_timeout: float = Field(default=3.0, gt=0)
+    apdu_retries: int = Field(default=3, ge=0)
+    # Reply wait: how long to wait for the proxy's answer to a request. None derives it from the APDU settings and
+    # max_per_request so that it always outlasts the proxy's own BATCH_READ limit.
+    timeout: float | None = Field(default=None, ge=0)
+    # How long to wait for the proxy process to start and register.
+    registration_timeout: float = Field(default=30.0, gt=0)
     use_read_multiple: bool = True
+
+    RPM_CHUNK_SIZE: ClassVar[int] = 10           # BatchRead's ReadPropertyMultiple chunk size
+    SETUP_CYCLES: ClassVar[int] = 2              # Who-Is + protocol-services-supported on first contact
+    REPLY_MARGIN: ClassVar[float] = 5.0
+
+    @property
+    def apdu_cycle(self) -> float:
+        """Worst-case seconds one request spends on a silent device."""
+        return self.apdu_timeout * (self.apdu_retries + 1)
+
+    @property
+    def batch_read_timeout(self) -> float:
+        """Seconds the proxy should allow one BATCH_READ of up to max_per_request points to a silent device."""
+        chunks = ceil(self.max_per_request / self.RPM_CHUNK_SIZE) if self.max_per_request > 0 else 10
+        return max(30.0, self.apdu_cycle * (chunks + self.SETUP_CYCLES))
+
+    @property
+    def reply_timeout(self) -> float:
+        """Driver-side wait for the proxy's reply; strictly longer than the proxy's batch limit."""
+        return self.timeout if self.timeout is not None else self.batch_read_timeout + self.REPLY_MARGIN
+
+    def proxy_launch_options(self) -> dict:
+        return {'local_interface': str(self.local_interface), 'bacnet_port': self.bacnet_port,
+                'apdu_timeout': self.apdu_timeout, 'apdu_retries': self.apdu_retries,
+                'batch_read_timeout': self.batch_read_timeout}
 
     @computed_field
     @property
@@ -118,7 +153,7 @@ class BacnetRemoteConfig(RemoteConfig):
 
     @bacnet_port.setter
     def bacnet_port(self, v):
-        self.cov_lifetime_configured = int(v)
+        self.bacnet_port_configured = int(v)
 
 class BACnetRegister(BaseRegister):
 
@@ -162,9 +197,8 @@ class BACnet(BaseInterface):
         self.time_synchronization_active = False
 
         self.ppm.register_callback(self.receive_cov, 'RECEIVE_COV', provides_response=False)
-        self.ppm.start()  # TODO: Does this and/or select_loop spawn need to be in finalize_setup? (If not, keep here.)
+        self.ppm.start()
         self.driver_agent.core.spawn(self.ppm.select_loop)
-        #_log.debug('AFTER BACNET INTERFACE INIT')
 
     @property
     def register_count(self):
@@ -175,16 +209,17 @@ class BACnet(BaseInterface):
         #  It could be called on every remote after the end of a setup loop, possibly?
         #_log.debug('BACnet finalize_setup called.')
         self.proxy_peer = self.ppm.get_proxy((str(self.config.local_interface), self.config.bacnet_port),
-                                             local_interface=str(self.config.local_interface))
+                                             **self.config.proxy_launch_options())
         _log.debug('BACnet finalize_setup: proxy_peer is: %s', self.proxy_peer)
         if initial_setup:
-            self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.ping_target)
+            self.ppm.wait_peer_registered(self.proxy_peer, self.config.registration_timeout, self.ping_target)
         # TODO: Consider adding a self.config.remote_refresh_interval to be scheduled as
         #  a periodic here to ping the target with a WhoIs.
         self.setup_time_synchronization()
         for topic, register in self.point_map.items():
             if register.is_cov:
-                self.ppm.wait_peer_registered(self.proxy_peer, self.config.timeout, self.establish_cov_subscription,
+                self.ppm.wait_peer_registered(self.proxy_peer, self.config.registration_timeout,
+                                              self.establish_cov_subscription,
                                               register, topic, self.config.cov_lifetime)
 
     def create_register(self, register_definition: BacnetPointConfig) -> BACnetRegister:
@@ -238,21 +273,50 @@ class BACnet(BaseInterface):
         if not pinged:
             self.schedule_ping()
 
+    def parse_proxy_response(self, response: Any, error_keys: Iterable[str]) -> tuple[Any, dict]:
+        """Normalize a reply from the BACnet Proxy into ``(result, errors)``.
+
+        ``ProtocolProxyManager.send`` returns an AsyncResult when a response is expected, or False when the
+        request could not be sent (e.g., the proxy process has not registered). The proxy itself replies with
+        ``{'result': ..., 'error': {...}}`` from its serializer, with ``{'status': 'error', 'error': ..., 'method': ...}``
+        when the endpoint raised or timed out, or with an empty body when the endpoint returned nothing.
+        Whole-request failures are reported against every key in ``error_keys`` (normally the affected topics).
+        A gevent Timeout waiting on the AsyncResult is left to propagate to the caller.
+        """
+        error_keys = list(error_keys)
+
+        def failed(message: str) -> tuple[dict, dict]:
+            return {}, {key: message for key in error_keys}
+
+        if not isinstance(response, AsyncResult):
+            return failed(f'Unable to send request to BACnet Proxy (send returned {response!r}).')
+        raw = response.get(timeout=self.config.reply_timeout)
+        if not raw:
+            return failed('Empty response from BACnet Proxy.')
+        try:
+            payload = json.loads(raw.decode('utf8'))
+        except (AttributeError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            return failed(f'Undecodable response from BACnet Proxy: {e}')
+        if not isinstance(payload, dict):
+            return failed(f'Unexpected response from BACnet Proxy: {payload!r}')
+        if payload.get('status') == 'error':
+            return failed(f"BACnet Proxy {payload.get('method', 'request')} failed: {payload.get('error')}")
+        return payload.get('result', {}), payload.get('error') or {}
+
     def _parse_scalar_response(self, response: Any, topic: str, operation: str) -> Any:
-        response_value = (json.loads(response.get(timeout=self.config.timeout).decode('utf8'))
-                    if isinstance(response, AsyncResult) else {'result': {}, 'error': {topic: response}})
-        #_log.debug(f'response_value is a {type(response_value)}: {response_value}')
-        if (result := response_value.get('result')) != {}:
-            #_log.debug(f'IF BLOCK, RESULT IS: {result}')
+        result, errors = self.parse_proxy_response(response, [topic])
+        if result != {}:
             return result
-        elif (error := response_value.get('error')) != {}:
-            msg = f'Error {operation} point: {topic} --- {error}'
+        elif errors:
+            msg = f'Error {operation} point: {topic} --- {errors.get(topic, errors)}'
         else:
-            msg = f'Unknown error {operation} point: {topic}. Response from proxy was: {response_value}'
+            msg = f'Unknown error {operation} point: {topic}. Response from proxy was empty.'
         _log.warning(msg)
         raise RuntimeError(msg)
 
     def get_point(self, topic: str, on_property: str = None):
+        if self.proxy_peer is None:
+            raise DriverInterfaceError("BACnet interface not initialized.  No proxy peer available.")
         register: BACnetRegister = cast(BACnetRegister, self.get_register_by_name(topic))
         response = self.ppm.send(self.proxy_peer,
                              ProtocolProxyMessage(
@@ -302,29 +366,30 @@ class BACnet(BaseInterface):
         # TODO: Manner of packing and unpacking this request needs to be rethought.
         point_map = {t: self._query_fields(self.point_map[t]) for t in topics if t in self.point_map}
         result_dict, error_dict = {}, {}
-        # while True:
+        if not point_map:
+            return result_dict, error_dict
+        # TODO: max_per_request could probably be detected from the device rather than only configured.
+        batch_size = self.config.max_per_request if self.config.max_per_request > 0 else len(point_map)
+        items = list(point_map.items())
         try:
-            # TODO:
-            #  Need to honor self.config.max_per_request, and probably detect it.
-            response = self.ppm.send(self.proxy_peer,
-                                     ProtocolProxyMessage(
-                                         method_name='BATCH_READ',
-                                         payload=json.dumps({
-                                             'device_address': self.config.target_address,
-                                             'read_specifications': point_map
-                                         }).encode('utf8'),
-                                         response_expected=True
-                                     )).get(timeout=self.config.timeout).decode('utf8')
-            #_log.debug(f"RESPONSE IS: {response}")
-            response = json.loads(response)
-            result_dict = response.get('result', {})
-            error_dict = response.get('error', {})
+            for i in range(0, len(items), batch_size):
+                batch = dict(items[i:i + batch_size])
+                response = self.ppm.send(self.proxy_peer,
+                                         ProtocolProxyMessage(
+                                             method_name='BATCH_READ',
+                                             payload=json.dumps({
+                                                 'device_address': self.config.target_address,
+                                                 'read_specifications': batch
+                                             }).encode('utf8'),
+                                             response_expected=True
+                                         ))
+                result, errors = self.parse_proxy_response(response, batch.keys())
+                result_dict.update(result if isinstance(result, dict) else {})
+                error_dict.update(errors)
         except Timeout as e:
             _log.warning(f'Request timed out polling: {self.config.target_address}: {e}')
         except Exception as e:
             _log.warning(f'Unexpected error in get_multiple_points: {e}')
-        #_log.debug(f'RECEIVED ERROR: {error_dict}')
-        #_log.debug(f'RECEIVED RESULT: {result_dict}')
         return result_dict, error_dict
 
     def set_multiple_points(self, topics_values, **kwargs):
@@ -336,9 +401,13 @@ class BACnet(BaseInterface):
         Revert entire device to its default state
         """
         # TODO: Add multipoint write support
-        write_registers = self.get_registers_by_type("byte", False)
-        for register in write_registers:
-            self.revert_point(register.point_name, priority=priority)
+        # point_map is keyed by full topic; registers only know their bare point name.
+        for topic, register in self.point_map.items():
+            if not register.read_only:
+                try:
+                    self.revert_point(topic, priority=priority)
+                except Exception as e:      # One failing point must not stop the rest of the device reverting.
+                    _log.warning(f'Error while reverting point {topic}: {e}')
 
     def revert_point(self, topic, priority=None):
         """

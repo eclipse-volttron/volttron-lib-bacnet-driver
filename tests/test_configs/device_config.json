@@ -1,0 +1,10 @@
+{
+  "driver_config": {
+    "target_address": "130.20.24.157",
+    "device_id": 506892
+  },
+  "driver_type": "bacnet",
+  "registry_config": "config://bacnet_test.csv",
+  "timezone": "US/Pacific",
+  "interval": 15
+}

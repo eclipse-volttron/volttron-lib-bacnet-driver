@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "volttron-lib-bacnet-driver"
-version = "2.0.0rc3"
+version = "2.0.0rc4"
 description = "BACnet driver supported and maintained by the Volttron team."
 authors = ["VOLTTRON Team <volttron@pnnl.gov>"]
 license = "Apache-2.0"

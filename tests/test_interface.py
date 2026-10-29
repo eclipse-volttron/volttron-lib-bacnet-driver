@@ -89,7 +89,7 @@ class TestSetup:
         cov = ppm.payloads('SETUP_COV')[0]
         assert cov == {'subscription_key': TOPIC('Temp'), 'device_address': '10.0.0.5',
                        'monitored_object_identifier': 'analogInput:1', 'property_identifier': 'present-value',
-                       'issue_confirmed_notifications': True, 'lifetime': 180.0}
+                       'issue_confirmed_notifications': True, 'lifetime': 180.0, 'remote_id': interface.remote_id.hex}
         assert [e for _, _, e in ppm.sent] == [False, False]                             # fire-and-forget
 
     def test_finalize_setup_without_initial_flag_skips_ping(self, interface, ppm):
@@ -187,6 +187,33 @@ class TestReadsAndWrites:
             interface.revert_all()
         assert len(ppm.payloads('WRITE_PROPERTY')) == 2 and 'Error while reverting point' in caplog.text
 
+    def test_get_multiple_points_on_property(self, interface, ppm):
+        """on_property applies to every point of a batch read, as it does for a single get_point; without it each
+        register's configured property is read."""
+        ppm.queue(serialized({TOPIC('Temp'): 70.0, TOPIC('Modes'): 'Auto'}))
+        interface.get_multiple_points([TOPIC('Temp'), TOPIC('Modes')])
+        specs = ppm.payloads('BATCH_READ')[-1]['read_specifications']
+        assert {t: s['property'] for t, s in specs.items()} == {TOPIC('Temp'): 'present-value',
+                                                               TOPIC('Modes'): 'state-text'}
+        ppm.queue(serialized({TOPIC('Temp'): 'Temp', TOPIC('Modes'): 'Modes'}))
+        results, errors = interface.get_multiple_points([TOPIC('Temp'), TOPIC('Modes')], on_property='object-name')
+        specs = ppm.payloads('BATCH_READ')[-1]['read_specifications']
+        assert all(s['property'] == 'object-name' for s in specs.values()) and len(specs) == 2
+        assert specs[TOPIC('Modes')]['array_index'] == 2     # other fields still come from the register
+        assert results == {TOPIC('Temp'): 'Temp', TOPIC('Modes'): 'Modes'} and errors == {}
+
+    def test_reads_ignore_write_only_keywords(self, interface, ppm):
+        """A confirming read after a write receives the write's keywords: on_property selects what to read back and
+        priority, meaningless for a read, is ignored rather than rejected."""
+        ppm.queue(serialized(66.0))
+        assert interface.get_point(TOPIC('Setpoint'), priority=12, on_property='relinquish-default') == 66.0
+        assert ppm.payloads('READ_PROPERTY')[-1]['property_identifier'] == 'relinquish-default'
+        ppm.queue(serialized({TOPIC('Setpoint'): 66.0}))
+        results, errors = interface.get_multiple_points([TOPIC('Setpoint')], priority=12,
+                                                        on_property='relinquish-default')
+        assert results == {TOPIC('Setpoint'): 66.0} and errors == {}
+        assert ppm.payloads('BATCH_READ')[-1]['read_specifications'][TOPIC('Setpoint')]['property'] == 'relinquish-default'
+
     def test_set_multiple_points_writes_each(self, interface, ppm):
         results, errors = interface.set_multiple_points([(TOPIC('Setpoint'), 65.0), (TOPIC('Temp'), 1.0)])
         assert results == {TOPIC('Setpoint'): None} and 'read only' in errors[TOPIC('Temp')]
@@ -194,18 +221,110 @@ class TestReadsAndWrites:
 
 
 class TestCOV:
-    def test_receive_cov_publishes_values(self, interface, driver_agent):
+    def test_receive_push_publishes_values(self, interface, driver_agent):
         raw = json.dumps({'result': {TOPIC('Temp'): 70.5}, 'error': {}}).encode('utf8')
-        interface.receive_cov.__wrapped__(interface, None, raw)
+        interface.receive_push.__wrapped__(interface, None, raw)
         driver_agent.publish_push.assert_called_once_with({TOPIC('Temp'): 70.5})
 
-    def test_receive_cov_logs_errors_and_publishes_nothing(self, interface, driver_agent, caplog):
+    def test_receive_push_logs_errors_and_publishes_nothing(self, interface, driver_agent, caplog):
         raw = json.dumps({'result': {}, 'error': {TOPIC('Temp'): 'subscription failed'}}).encode('utf8')
         with caplog.at_level(logging.WARNING):
-            interface.receive_cov.__wrapped__(interface, None, raw)
-        assert 'Error received in COV push' in caplog.text and not driver_agent.publish_push.called
+            interface.receive_push.__wrapped__(interface, None, raw)
+        assert 'Error received with pushed values' in caplog.text and not driver_agent.publish_push.called
 
     def test_establish_cov_subscription_uses_lifetime_seconds(self, interface, ppm):
         from datetime import timedelta
         interface.establish_cov_subscription(interface.point_map[TOPIC('Temp')], TOPIC('Temp'), timedelta(minutes=2))
         assert ppm.payloads('SETUP_COV')[0]['lifetime'] == 120.0
+
+
+from pydantic import ValidationError
+from volttron.driver.base.config import RemoteConfig
+from volttron.driver.interfaces.bacnet.bacnet import BacnetRemoteConfig, DriverRole
+
+SERVED = {'driver_type': 'bacnet', 'driver_role': 'server', 'local_interface': '127.0.0.1/32', 'bacnet_port': 3, 'served_port': 47850,
+          'device_id': 4242, 'object_name': 'rooftop-unit'}
+SERVED_POINTS = [
+    point('Temp', 'analogInput', 1, writable=True, data_source='server', default_value='68.25', cov_increment=0.1),
+    point('Setpoint', 'analogValue', 1, writable=True, data_source='server', default_value='72.5'),
+    point('Fan', 'binaryValue', 1, writable=True, data_source='server', units='', default_value='off'),
+    point('Mode', 'multiStateValue', 1, writable=True, data_source='server', units='', number_of_states=3, remote_writable=False),
+]
+
+
+class TestServerRole:
+    def test_role_values_and_fields(self):
+        cfg = BacnetRemoteConfig(**SERVED)
+        assert cfg.driver_role is DriverRole.server and cfg.is_server and cfg.target_address is None
+        assert cfg.served_fields() == {'role': 'server', 'local_interface': '127.0.0.1/32', 'port': 47850, 'device_id': 4242,
+                                       'object_name': 'rooftop-unit'}
+        assert cfg.proxy_key() == ('127.0.0.1/32', 3) and cfg.resolved_proxy_port == 47811
+        assert BacnetRemoteConfig(driver_type='bacnet', driver_role='outstation', served_port=5, device_id=1).resolved_served_port == 47813
+        assert BacnetRemoteConfig(driver_type='bacnet', device_address='h', device_id=1).driver_role is DriverRole.client
+        with pytest.raises(ValidationError, match='device_address'):
+            BacnetRemoteConfig(driver_type='bacnet', device_id=1)
+        with pytest.raises(ValidationError, match='served_port'):
+            BacnetRemoteConfig(driver_type='bacnet', driver_role='server', device_id=1)
+        with pytest.raises(ValidationError, match='must differ'):
+            BacnetRemoteConfig(driver_type='bacnet', driver_role='server', device_id=1, bacnet_port=3, served_port=47811)
+
+    def test_served_rows(self, make_interface):
+        iface = make_interface(SERVED_POINTS, **SERVED)
+        reg = {t.rsplit('/', 1)[-1]: r for t, r in iface.point_map.items()}
+        assert (reg['Temp'].remote_writable, reg['Temp'].initial_value, reg['Temp'].cov_increment) == (False, 68.25, 0.1)
+        assert (reg['Setpoint'].remote_writable, reg['Setpoint'].initial_value) == (True, 72.5)
+        assert (reg['Fan'].remote_writable, reg['Fan'].initial_value) == (True, False)
+        assert (reg['Mode'].remote_writable, reg['Mode'].number_of_states, reg['Mode'].initial_value) == (False, 3, None)
+        row = BacnetPointConfig(**{'Volttron Point Name': 'x', 'Object Type': 'analogValue', 'Instance': '2', 'Data Source': 'server',
+                                   'Remote Writable': 'FALSE', 'Starting Value': '5', 'Number Of States': '', 'COV Increment': '0.5'})
+        assert row.is_served and row.resolved_remote_writable is False and row.default_value == '5' and row.cov_increment == 0.5
+
+    def test_prepare_registry_config_defaults_served_rows(self, make_interface):
+        iface = make_interface(**SERVED)
+        rows = [{'Volttron Point Name': 'a', 'Object Type': 'analogValue', 'Instance': 1},
+                {'Volttron Point Name': 'b', 'Object Type': 'analogInput', 'Instance': 2, 'Writable': 'FALSE', 'Data Source': 'static'}]
+        prepared = iface.prepare_registry_config(rows, RemoteConfig(**SERVED))
+        assert prepared[0] == {**rows[0], 'data_source': 'server', 'writable': True} and prepared[1] == rows[1]
+        assert iface.prepare_registry_config(rows, RemoteConfig(driver_type='bacnet', device_address='h', device_id=1)) == rows
+
+    def test_registration_describes_the_served_device_and_skips_client_setup(self, make_interface, ppm):
+        iface = make_interface(SERVED_POINTS, **SERVED)
+        ppm.queue(serialized({'server': '127.0.0.1/32:47850:4242', 'points': 4, 'seeded': 0, 'port': 47850}))
+        iface.finalize_setup(initial_setup=True)
+        assert ppm.launch == (('127.0.0.1/32', 3), {**iface.config.proxy_launch_options(), 'persistent': True})
+        (method, payload, _), = ppm.sent                                            # no WHO_IS, no SETUP_COV
+        assert method == 'REGISTER_REMOTE'
+        assert {k: v for k, v in payload.items() if k != 'points'} == {'role': 'server', 'local_interface': '127.0.0.1/32', 'port': 47850,
+                                                                        'device_id': 4242, 'object_name': 'rooftop-unit', 'values': {},
+                                                                        'remote_id': iface.remote_id.hex}
+        by_topic = {p['topic']: p for p in payload['points']}
+        assert by_topic[TOPIC('Temp')] == {'topic': TOPIC('Temp'), 'object_type': 'analogInput', 'instance': 1, 'property': 'present-value',
+                                           'units': 'degF', 'remote_writable': False, 'initial_value': 68.25, 'number_of_states': 2,
+                                           'cov_increment': 0.1, 'object_name': ''}
+        assert by_topic[TOPIC('Mode')]['number_of_states'] == 3 and by_topic[TOPIC('Fan')]['initial_value'] is False
+
+    def test_served_reads_writes_and_revert(self, make_interface, ppm, driver_agent):
+        iface = make_interface(SERVED_POINTS, **SERVED)
+        iface.proxy_peer = ppm.peer
+        ppm.queue(serialized({TOPIC('Temp'): 68.25, TOPIC('Fan'): True}))
+        results, errors = iface.get_multiple_points([TOPIC('Temp'), TOPIC('Fan')])
+        assert results == {TOPIC('Temp'): 68.25, TOPIC('Fan'): True} and errors == {}
+        assert ppm.payloads('READ_POINTS') == [{'topics': [TOPIC('Temp'), TOPIC('Fan')]}]
+        ppm.queue(serialized({TOPIC('Setpoint'): {'status': 'stored', 'value': 70.0}}))
+        assert iface.set_point(TOPIC('Setpoint'), '70') == 70.0
+        assert ppm.payloads('WRITE_POINTS') == [{'values': {TOPIC('Setpoint'): 70.0}}]
+        driver_agent.publish_push.assert_called_with({TOPIC('Setpoint'): 70.0})
+        ppm.queue(serialized({}, {TOPIC('Mode'): 'bad value'}))
+        with pytest.raises(IOError, match='bad value'):
+            iface.set_point(TOPIC('Mode'), 2)
+        ppm.queue(serialized({TOPIC('Setpoint'): {'status': 'stored'}}))
+        iface.revert_point(TOPIC('Setpoint'))
+        assert ppm.payloads('WRITE_POINTS')[-1] == {'values': {TOPIC('Setpoint'): 72.5}}         # the starting value
+        ppm.sent.clear()
+        iface.revert_point(TOPIC('Mode'))                                                           # no starting value: nothing
+        assert ppm.sent == []
+        ppm.queue(serialized({TOPIC('Temp'): 69.0}))
+        assert iface.get_point(TOPIC('Temp')) == 69.0
+
+    def test_unique_remote_id_includes_the_role(self):
+        assert BACnet.unique_remote_id('x', RemoteConfig(**SERVED)) == ('bacnet', 'server', '127.0.0.1/32', 47850, 4242)

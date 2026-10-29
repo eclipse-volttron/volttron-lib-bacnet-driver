@@ -92,6 +92,53 @@ Please see the following for contributing guidelines [contributing](https://gith
 
 Please see the following helpful guide about [developing modular VOLTTRON agents](https://eclipse-volttron.readthedocs.io/en/latest/developing-volttron/developing-agents/agent-development.html)
 
+## Server role
+
+With `"driver_role": "server"` the device *is* a BACnet/IP device the proxy serves: a bacpypes3 application of its own on
+`local_interface` and `served_port` (an offset from 47808 or an absolute port, distinct from the proxy's `bacnet_port`)
+with device instance `device_id`, and the registry rows are its objects.
+
+```json
+{
+    "remote_config": {
+        "driver_type": "bacnet",
+        "driver_role": "server",
+        "local_interface": "192.0.2.10/24",
+        "bacnet_port": 0,
+        "served_port": 1,
+        "device_id": 4242,
+        "object_name": "rooftop-unit"
+    },
+    "registry_config": "config://served.csv"
+}
+```
+
+```csv
+Volttron Point Name,Object Type,Instance,Units,Writable,Remote Writable,Number Of States,COV Increment,Starting Value
+Temp,analogInput,1,degreesFahrenheit,TRUE,,,0.1,68.25
+Setpoint,analogValue,1,degreesFahrenheit,TRUE,,,,72.5
+Fan,binaryValue,1,,TRUE,,,,inactive
+Mode,multiStateValue,1,,TRUE,FALSE,3,,2
+```
+
+* Rows default to `Data Source` `server` and `Writable` TRUE (`prepare_registry_config`): served points are never polled
+  and the platform may set any of them. `set_point` sets the object's present value (and the relinquish default of a
+  commandable object) and reflects it into the equipment tree at once; `revert_point` restores `Starting Value`. Only
+  `present-value` is served as a point; `Units`, `Number Of States`, `COV Increment` and `Object Name` describe the
+  object.
+* `Remote Writable` says which objects peers may command: outputs and values by default, inputs never. Such objects are
+  commandable, so a peer's priority array applies and relinquishing returns the platform's value; writes to other
+  objects are refused with write-access-denied.
+* Peers poll the served objects or subscribe to them (bacpypes3 serves SubscribeCOV; analog objects use `COV
+  Increment`). A peer's accepted writes are pushed to this interface, which publishes them like a change of value.
+* Restarts: on every (re)registration the interface sends the equipment tree's current values with the object table; a
+  relaunched proxy takes them ahead of the starting values and pushes its whole table back. The proxy manager relaunches
+  a proxy that dies. Across a platform driver restart the served values come from the agent's configuration store
+  (`state/<device topic>`, see the platform driver's documentation).
+
+`tests/e2e_server_harness.py` runs this role end to end: a served device and a client-role interface through one real
+proxy process, including a proxy crash.
+
 # Disclaimer Notice
 
 This material was prepared as an account of work sponsored by an agency of the
